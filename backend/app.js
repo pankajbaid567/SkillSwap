@@ -6,6 +6,7 @@ const errorHandler = require('./middlewares/error.middleware');
 
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
+const matchingRoutes = require('./routes/matching.routes');
 
 const app = express();
 
@@ -22,6 +23,7 @@ app.use('/api', rateLimiter);
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/matches', matchingRoutes);
 
 // Root Endpoint
 app.get('/', (req, res) => {

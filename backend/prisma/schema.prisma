@@ -21,16 +21,20 @@ model User {
   refreshTokens     RefreshToken[]
   skills            UserSkill[]
   availabilitySlots AvailabilitySlot[]
+  matchesAsUser1    Match[]            @relation("MatchUser1")
+  matchesAsUser2    Match[]            @relation("MatchUser2")
 }
 
 model Profile {
-  id          String  @id @default(uuid()) @db.Uuid
-  userId      String  @unique @db.Uuid
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @unique @db.Uuid
   displayName String?
   bio         String?
   avatarUrl   String?
   location    String?
   timezone    String?
+  latitude    Decimal? @db.Decimal(10, 7)
+  longitude   Decimal? @db.Decimal(10, 7)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -103,4 +107,24 @@ model AvailabilitySlot {
   isRecurring Boolean  @default(false)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Match {
+  id                 String   @id @default(uuid()) @db.Uuid
+  userId1            String   @db.Uuid
+  userId2            String   @db.Uuid
+  compatibilityScore Decimal  @db.Decimal(5, 4)
+  strategyUsed       String
+  sharedInterests    Json?
+  isActive           Boolean  @default(true)
+  status             String   @default("pending") // pending | accepted | declined | expired
+  matchedAt          DateTime @default(now())
+  expiresAt          DateTime
+
+  user1 User @relation("MatchUser1", fields: [userId1], references: [id], onDelete: Cascade)
+  user2 User @relation("MatchUser2", fields: [userId2], references: [id], onDelete: Cascade)
+
+  @@index([userId1])
+  @@index([userId2])
+  @@index([status])
 }
