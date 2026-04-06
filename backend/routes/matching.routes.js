@@ -1,7 +1,5 @@
 const { Router } = require('express');
-const { z } = require('zod');
 const matchingController = require('../controllers/matching.controller');
-const { validateBody } = require('../middlewares/validate.middleware');
 const { verifyAccessToken } = require('../middlewares/auth.middleware');
 
 const router = Router();
@@ -10,9 +8,18 @@ const router = Router();
 router.use(verifyAccessToken);
 
 /**
+ * GET /api/matches/stats
+ * Dashboard match statistics for the authenticated user.
+ * Returns: { totalMatches, acceptedMatches, declinedMatches }
+ *
+ * IMPORTANT: Must be registered BEFORE /:id to avoid capturing "stats" as :id
+ */
+router.get('/stats', matchingController.getMatchStats);
+
+/**
  * GET /api/matches
  * Find potential matches for the authenticated user.
- * 
+ *
  * Query params:
  *   - strategy: 'skill' | 'location' | 'hybrid' (default: 'skill')
  *   - page: number (default: 1)

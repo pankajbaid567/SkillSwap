@@ -1,20 +1,22 @@
 const SkillBasedStrategy = require('../strategies/skill-based.strategy');
 const defaultMatchRepository = require('../repositories/match.repository');
 const defaultUserRepository = require('../repositories/user.repository');
-const cache = require('../config/cache.config');
+const cache = require('../cache/redis.client');
+const logger = require('../utils/logger');
 
 /**
  * Cache key prefix and TTL constants.
  */
-const CACHE_PREFIX = 'matches';
+const CACHE_KEY_PREFIX = 'skillswap:matches';
 const CACHE_TTL_SECONDS = 600; // 10 minutes
 const DEFAULT_MATCH_EXPIRY_DAYS = 7;
 
 /**
  * MatchingService — orchestrates the matching engine.
- * 
+ *
  * Design:
  *   - Strategy Pattern: #strategy is runtime-swappable via setStrategy()
+ *   - Cache-Aside Pattern: check cache → compute on miss → store → return
  *   - OCP: closed for modification, open for extension (new strategies)
  *   - DIP: depends on abstractions (MatchingStrategy interface)
  */
@@ -28,7 +30,7 @@ class MatchingService {
   /** @type {import('../repositories/user.repository')} */
   #userRepository;
 
-  /** @type {import('../config/cache.config')} */
+  /** @type {import('../cache/redis.client')} */
   #cache;
 
   /**
@@ -51,8 +53,6 @@ class MatchingService {
 
   /**
    * Swap the matching strategy at runtime.
-   * Demonstrates the Strategy Pattern — callers can switch algorithms
-   * without modifying MatchingService internals.
    * @param {import('../strategies/matching.strategy.interface')} strategy
    */
   setStrategy(strategy) {
@@ -60,35 +60,53 @@ class MatchingService {
   }
 
   /**
+   * Get the current strategy name (lowercase, without 'Strategy' suffix).
+   * @returns {string}
+   */
+  get strategyName() {
+    return this.#strategy.constructor.name
+      .replace(/Strategy$/, '')
+      .replace(/([a-z])([A-Z])/g, '$1-$2')
+      .toLowerCase();
+  }
+
+  /**
    * Find and score matches for a user.
-   * 
-   * Flow:
-   *  1. Check cache → return if hit
-   *  2. Fetch user with skills + availability
-   *  3. Get candidate pool (exclude existing active matches)
-   *  4. Apply strategy.findCandidates() to pre-filter
-   *  5. Score each candidate with strategy.calculateScore()
-   *  6. Rank, paginate, and store match records
-   *  7. Cache results for 10 minutes
-   * 
+   *
+   * Cache-Aside Pattern:
+   *  1. Build cacheKey = skillswap:matches:{userId}:{strategyName}:{page}
+   *  2. Try Redis GET → return if hit (with meta.cached = true)
+   *  3. On miss: compute matches → store in Redis TTL 600s → return (meta.cached = false)
+   *  4. Invalidate cache on: new skill added, availability changed, match accepted
+   *
    * @param {string} userId
    * @param {Object} [options]
    * @param {number} [options.page=1]
    * @param {number} [options.limit=20]
-   * @returns {Promise<{data: Array, total: number, page: number, limit: number, totalPages: number}>}
+   * @returns {Promise<Object>} { matches, pagination, meta }
    */
   async findMatches(userId, options = {}) {
     const page = parseInt(options.page, 10) || 1;
-    const limit = parseInt(options.limit, 10) || 20;
-    const cacheKey = `${CACHE_PREFIX}:${userId}:${this.#strategy.constructor.name}:p${page}:l${limit}`;
+    const limit = Math.min(parseInt(options.limit, 10) || 20, 50);
+    const strategy = this.strategyName;
 
-    // 1. Check cache
+    // 1. Build cache key
+    const cacheKey = `${CACHE_KEY_PREFIX}:${userId}:${strategy}:${page}`;
+
+    // 2. Try cache
     const cached = await this.#cache.get(cacheKey);
     if (cached) {
-      return JSON.parse(cached);
+      logger.info('Cache hit for matches', { userId, strategy, page });
+      return {
+        ...cached,
+        meta: { ...cached.meta, cached: true },
+      };
     }
 
-    // 2. Fetch the seeking user
+    // 3. Cache miss — compute matches
+    logger.info('Cache miss — computing matches', { userId, strategy, page });
+
+    // Fetch the seeking user
     const user = await this.#userRepository.findWithSkillsAndAvailability(userId);
     if (!user) {
       const error = new Error('User not found');
@@ -97,17 +115,15 @@ class MatchingService {
       throw error;
     }
 
-    // 3. Get candidate pool (excludes existing matches/swaps)
+    // Get candidate pool (excludes existing matches, limited to 200)
     const pool = await this.#matchRepository.getActiveCandidatePool(userId);
 
-    // 4. Pre-filter with strategy
+    // Pre-filter with strategy
     const candidates = this.#strategy.findCandidates(userId, pool);
 
-    // 5. Score each candidate
+    // Score each candidate
     const scoredMatches = candidates.map((candidate) => {
       const score = this.#strategy.calculateScore(user, candidate);
-
-      // Determine shared interests (skills both users engage with)
       const sharedInterests = this._findSharedInterests(user, candidate);
 
       return {
@@ -117,12 +133,11 @@ class MatchingService {
       };
     });
 
-    // 6. Rank by score
+    // Rank by score
     const ranked = this.#strategy.rankMatches(scoredMatches);
 
     // Paginate
     const total = ranked.length;
-    const totalPages = Math.ceil(total / limit);
     const start = (page - 1) * limit;
     const paginated = ranked.slice(start, start + limit);
 
@@ -135,11 +150,7 @@ class MatchingService {
         // Avoid duplicating existing matches
         const existing = await this.#matchRepository.findExistingMatch(userId, match.user.id);
         if (existing) {
-          return {
-            ...match,
-            matchId: existing.id,
-            isExisting: true,
-          };
+          return { ...match, matchId: existing.id, matchedAt: existing.matchedAt || new Date() };
         }
 
         const record = await this.#matchRepository.createMatch({
@@ -151,31 +162,27 @@ class MatchingService {
           expiresAt: matchExpiry,
         });
 
-        return {
-          ...match,
-          matchId: record.id,
-          isExisting: false,
-        };
-      })
+        return { ...match, matchId: record.id, matchedAt: record.matchedAt || new Date() };
+      }),
     );
 
-    // Build safe response (strip passwords)
+    // Build response per spec
+    const computedAt = new Date().toISOString();
+
     const response = {
-      data: storedMatches.map((m) => ({
+      matches: storedMatches.map((m) => ({
         matchId: m.matchId,
+        matchedUser: this._formatMatchedUser(m.user),
         compatibilityScore: m.score,
         sharedInterests: m.sharedInterests,
-        strategyUsed: this.#strategy.constructor.name,
-        candidate: this._sanitizeUser(m.user),
+        matchedAt: m.matchedAt,
       })),
-      total,
-      page,
-      limit,
-      totalPages,
+      pagination: { page, limit, total },
+      meta: { strategy, computedAt, cached: false },
     };
 
-    // 7. Cache for 10 minutes
-    await this.#cache.set(cacheKey, JSON.stringify(response), 'EX', CACHE_TTL_SECONDS);
+    // 4. Store in cache with TTL
+    await this.#cache.set(cacheKey, response, CACHE_TTL_SECONDS);
 
     return response;
   }
@@ -197,7 +204,7 @@ class MatchingService {
   }
 
   /**
-   * Accept a match. Updates status and triggers swap creation.
+   * Accept a match. Updates status and invalidates cache for both users.
    * @param {string} matchId
    * @param {string} userId - The user accepting the match
    * @returns {Promise<Object>}
@@ -205,24 +212,21 @@ class MatchingService {
   async acceptMatch(matchId, userId) {
     const match = await this._validateMatchAction(matchId, userId);
 
-    const updated = await this.#matchRepository.updateStatus(matchId, 'accepted');
+    const updated = await this.#matchRepository.updateMatchStatus(matchId, {
+      status: 'accepted',
+    });
 
     // Invalidate cached matches for both users
-    await this._invalidateCache(match.userId1);
-    await this._invalidateCache(match.userId2);
+    await this._invalidateUserCache(match.userId1);
+    await this._invalidateUserCache(match.userId2);
 
     // TODO: Phase 2 — Trigger SwapService.createSwap(match)
-    // const swap = await swapService.createSwap({
-    //   user1Id: match.userId1,
-    //   user2Id: match.userId2,
-    //   matchId: match.id,
-    // });
 
     return updated;
   }
 
   /**
-   * Decline a match. Updates status to 'declined'.
+   * Decline a match. Updates status to 'declined' and invalidates cache.
    * @param {string} matchId
    * @param {string} userId - The user declining the match
    * @returns {Promise<Object>}
@@ -230,13 +234,24 @@ class MatchingService {
   async declineMatch(matchId, userId) {
     const match = await this._validateMatchAction(matchId, userId);
 
-    const updated = await this.#matchRepository.updateStatus(matchId, 'declined');
+    const updated = await this.#matchRepository.updateMatchStatus(matchId, {
+      status: 'declined',
+    });
 
     // Invalidate cached matches for both users
-    await this._invalidateCache(match.userId1);
-    await this._invalidateCache(match.userId2);
+    await this._invalidateUserCache(match.userId1);
+    await this._invalidateUserCache(match.userId2);
 
     return updated;
+  }
+
+  /**
+   * Get match statistics for a user (dashboard use).
+   * @param {string} userId
+   * @returns {Promise<{totalMatches: number, acceptedMatches: number, declinedMatches: number}>}
+   */
+  async getMatchStats(userId) {
+    return await this.#matchRepository.getMatchStats(userId);
   }
 
   /**
@@ -271,7 +286,6 @@ class MatchingService {
       throw error;
     }
 
-    // Ensure the acting user is part of this match
     if (match.userId1 !== userId && match.userId2 !== userId) {
       const error = new Error('Forbidden: you are not part of this match');
       error.statusCode = 403;
@@ -305,20 +319,33 @@ class MatchingService {
   }
 
   /**
-   * Remove sensitive data from user objects before returning.
+   * Format a user object into the spec-defined matchedUser shape.
    * @private
+   * @param {Object} user
+   * @returns {Object} { id, displayName, avatarUrl, avgRating, location, skills }
    */
-  _sanitizeUser(user) {
-    const { passwordHash, ...safe } = user;
-    return safe;
+  _formatMatchedUser(user) {
+    return {
+      id: user.id,
+      displayName: user.profile?.displayName || null,
+      avatarUrl: user.profile?.avatarUrl || null,
+      avgRating: parseFloat(user.avgRating) || 0,
+      location: user.profile?.location || null,
+      skills: (user.skills || []).map((us) => ({
+        name: us.skill?.name || 'Unknown',
+        type: us.type,
+        level: us.proficiencyLevel,
+      })),
+    };
   }
 
   /**
    * Invalidate all cached match results for a given user.
+   * Uses pattern: skillswap:matches:{userId}:*
    * @private
    */
-  async _invalidateCache(userId) {
-    await this.#cache.delByPattern(`${CACHE_PREFIX}:${userId}:*`);
+  async _invalidateUserCache(userId) {
+    await this.#cache.invalidatePattern(`${CACHE_KEY_PREFIX}:${userId}:*`);
   }
 }
 
