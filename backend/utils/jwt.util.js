@@ -1,0 +1,37 @@
+const jwt = require('jsonwebtoken');
+const { envConfig } = require('../config/env.config');
+
+/**
+ * Generates an access token
+ * @param {Object} payload - Data to encode in the token
+ * @returns {string} - The JWT access token
+ */
+const generateAccessToken = (payload) => {
+  return jwt.sign(payload, envConfig.JWT_SECRET, { expiresIn: '15m' });
+};
+
+/**
+ * Generates a refresh token
+ * @param {Object} payload - Data to encode in the token
+ * @returns {string} - The JWT refresh token
+ */
+const generateRefreshToken = (payload) => {
+  return jwt.sign(payload, envConfig.JWT_REFRESH_SECRET, { expiresIn: '7d' });
+};
+
+/**
+ * Verifies a JWT token
+ * @param {string} token - The token to verify
+ * @param {boolean} isRefresh - Whether this is a refresh token
+ * @returns {Object} - The decoded payload
+ */
+const verifyToken = (token, isRefresh = false) => {
+  const secret = isRefresh ? envConfig.JWT_REFRESH_SECRET : envConfig.JWT_SECRET;
+  return jwt.verify(token, secret);
+};
+
+module.exports = {
+  generateAccessToken,
+  generateRefreshToken,
+  verifyToken
+};
