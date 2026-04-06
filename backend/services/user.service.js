@@ -1,0 +1,171 @@
+const prisma = require('../config/db.config'); // Fallback if we need specific raw queries, but try to use repo
+const defaultUserRepository = require('../repositories/user.repository');
+
+/**
+ * Encapsulates the core business logic for user profiles, skills, and availability.
+ * Follows the Dependency Inversion Principle mapping to an interface abstraction representation.
+ */
+class UserService {
+  /**
+   * @param {import('../repositories/user.repository.js').IUserRepository} userRepository 
+   */
+  constructor(userRepository) {
+    this.userRepository = userRepository;
+  }
+
+  async getProfile(userId) {
+    const user = await this.userRepository.findWithSkillsAndAvailability(userId);
+    if (!user) {
+      const error = new Error('User not found');
+      error.statusCode = 404;
+      error.errorCode = 'USER_NOT_FOUND';
+      throw error;
+    }
+    
+    // Safety check - never return password
+    delete user.passwordHash;
+    return user;
+  }
+
+  async getPublicProfile(userId) {
+    const user = await this.getProfile(userId);
+    
+    // Abstract public profile safe DTO shape
+    return {
+      id: user.id,
+      email: user.email, // Depending on privacy settings, you might want to hide this
+      isActive: user.isActive,
+      avgRating: user.avgRating,
+      totalSwaps: user.totalSwaps,
+      profile: user.profile,
+      skills: user.skills, // Publicly visible skills
+      availabilitySlots: user.availabilitySlots
+    };
+  }
+
+  async updateProfile(userId, dto) {
+    // Basic verification
+    await this.getProfile(userId);
+
+    const updatedProfile = await this.userRepository.updateProfile(userId, {
+      displayName: dto.displayName,
+      bio: dto.bio,
+      avatarUrl: dto.avatarUrl,
+      location: dto.location,
+      timezone: dto.timezone
+    });
+
+    return updatedProfile;
+  }
+
+  async addSkill(userId, skillDto) {
+    // Validate if the skill actually exists in the system (or Prisma would throw an FK error)
+    // Here we let Prisma relational constraints handle it, but we could explicitly check via repo constraint
+    try {
+      const newSkill = await this.userRepository.createUserSkill({
+        userId,
+        skillId: skillDto.skillId,
+        type: skillDto.type,
+        proficiencyLevel: skillDto.proficiencyLevel,
+        description: skillDto.description
+      });
+      return newSkill;
+    } catch (e) {
+      // Catch FK violation representing non-existent skill
+      if (e.code === 'P2003') {
+        const error = new Error('Invalid skill ID provided');
+        error.statusCode = 400;
+        throw error;
+      }
+      throw e;
+    }
+  }
+
+  async removeSkill(userId, userSkillId) {
+    const userSkill = await this.userRepository.findUserSkillById(userSkillId);
+    if (!userSkill) {
+      const error = new Error('Skill mapping not found');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (userSkill.userId !== userId) {
+      const error = new Error('Forbidden action');
+      error.statusCode = 403;
+      throw error;
+    }
+
+    await this.userRepository.deleteUserSkill(userSkillId);
+  }
+
+  async updateSkillLevel(userId, userSkillId, level) {
+    const userSkill = await this.userRepository.findUserSkillById(userSkillId);
+    if (!userSkill) {
+      const error = new Error('Skill mapping not found');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (userSkill.userId !== userId) {
+      const error = new Error('Forbidden action');
+      error.statusCode = 403;
+      throw error;
+    }
+
+    return await this.userRepository.updateUserSkillLevel(userSkillId, level);
+  }
+
+  async addAvailabilitySlot(userId, slotDto) {
+    // Optionally check if slot perfectly overlaps here 
+    // Basic constraint: valid times
+    return await this.userRepository.createAvailabilitySlot({
+      userId,
+      dayOfWeek: slotDto.dayOfWeek,
+      slotStart: slotDto.slotStart, // Assuming strictly checked schema date string format (e.g. 1970-01-01T14:30:00.000Z)
+      slotEnd: slotDto.slotEnd,
+      isRecurring: slotDto.isRecurring
+    });
+  }
+
+  async removeAvailabilitySlot(userId, slotId) {
+    const slot = await this.userRepository.findAvailabilitySlotById(slotId);
+    if (!slot) {
+      const error = new Error('Slot not found');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (slot.userId !== userId) {
+      const error = new Error('Forbidden action');
+      error.statusCode = 403;
+      throw error;
+    }
+
+    await this.userRepository.deleteAvailabilitySlot(slotId);
+  }
+
+  async searchUsers(query, filters) {
+    const page = parseInt(filters.page, 10) || 1;
+    const limit = parseInt(filters.limit, 10) || 20;
+    const skip = (page - 1) * limit;
+
+    const { users, total } = await this.userRepository.searchUsers(query, filters.type, skip, limit);
+    
+    // Abstract shapes to omit passhashes before transport
+    const safeUsers = users.map(user => {
+      delete user.passwordHash;
+      return user;
+    });
+
+    return {
+      data: safeUsers,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    };
+  }
+}
+
+// Inject dependency
+module.exports = new UserService(defaultUserRepository);

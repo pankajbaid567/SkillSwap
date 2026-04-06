@@ -17,8 +17,10 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  profile       Profile?
-  refreshTokens RefreshToken[]
+  profile           Profile?
+  refreshTokens     RefreshToken[]
+  skills            UserSkill[]
+  availabilitySlots AvailabilitySlot[]
 }
 
 model Profile {
@@ -39,6 +41,66 @@ model RefreshToken {
   token     String   @unique
   expiresAt DateTime
   isRevoked Boolean  @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum SkillType {
+  offer
+  want
+}
+
+enum ProficiencyLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+model SkillCategory {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  parentId  String?  @db.Uuid
+  createdAt DateTime @default(now())
+
+  parent   SkillCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children SkillCategory[] @relation("CategoryHierarchy")
+  skills   Skill[]
+}
+
+model Skill {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  description String?
+  categoryId  String   @db.Uuid
+  createdAt   DateTime @default(now())
+
+  category   SkillCategory @relation(fields: [categoryId], references: [id])
+  userSkills UserSkill[]
+}
+
+model UserSkill {
+  id               String           @id @default(uuid()) @db.Uuid
+  userId           String           @db.Uuid
+  skillId          String           @db.Uuid
+  type             SkillType
+  proficiencyLevel ProficiencyLevel
+  description      String?
+  endorsementCount Int              @default(0)
+  isVerified       Boolean          @default(false)
+  addedAt          DateTime         @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+}
+
+model AvailabilitySlot {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @db.Uuid
+  dayOfWeek   Int      @db.SmallInt // 0-6
+  slotStart   DateTime @db.Time
+  slotEnd     DateTime @db.Time
+  isRecurring Boolean  @default(false)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
