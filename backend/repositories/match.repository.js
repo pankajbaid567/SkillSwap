@@ -3,6 +3,11 @@ const prisma = require('../config/db.config');
 /**
  * Encapsulates database queries for the Match model.
  * Adheres to SRP by handling only DB operations for matches.
+ *
+ * Performance notes:
+ *   - getActiveCandidatePool limits to 200 candidates (pre-filter before scoring)
+ *   - All queries use select with specific columns where feasible (never SELECT *)
+ *   - Relies on DB indexes: user_skills(user_id, type), availability_slots(user_id, day_of_week)
  */
 class MatchRepository {
   /**
@@ -34,7 +39,7 @@ class MatchRepository {
   }
 
   /**
-   * Find a match by its ID.
+   * Find a match by its ID with full user details.
    * @param {string} matchId
    * @returns {Promise<Object|null>}
    */
@@ -59,15 +64,16 @@ class MatchRepository {
   }
 
   /**
-   * Find all matches for a user with optional status filter and pagination.
+   * Find all matches for a user with pagination.
+   * Includes both user profiles, skills, and scores.
    * @param {string} userId
-   * @param {Object} options
-   * @param {string} [options.status] - Filter by match status
-   * @param {number} [options.page=1]
-   * @param {number} [options.limit=20]
+   * @param {Object} pagination
+   * @param {number} [pagination.page=1]
+   * @param {number} [pagination.limit=20]
+   * @param {string} [pagination.status] - Filter by match status
    * @returns {Promise<{matches: Array, total: number}>}
    */
-  async findByUserId(userId, { status, page = 1, limit = 20 } = {}) {
+  async findMatchesByUser(userId, { page = 1, limit = 20, status } = {}) {
     const skip = (page - 1) * limit;
 
     const whereClause = {
@@ -82,9 +88,56 @@ class MatchRepository {
     const [matches, total] = await Promise.all([
       prisma.match.findMany({
         where: whereClause,
-        include: {
-          user1: { include: { profile: true } },
-          user2: { include: { profile: true } },
+        select: {
+          id: true,
+          userId1: true,
+          userId2: true,
+          compatibilityScore: true,
+          strategyUsed: true,
+          sharedInterests: true,
+          status: true,
+          matchedAt: true,
+          expiresAt: true,
+          user1: {
+            select: {
+              id: true,
+              avgRating: true,
+              profile: {
+                select: {
+                  displayName: true,
+                  avatarUrl: true,
+                  location: true,
+                },
+              },
+              skills: {
+                select: {
+                  type: true,
+                  proficiencyLevel: true,
+                  skill: { select: { name: true } },
+                },
+              },
+            },
+          },
+          user2: {
+            select: {
+              id: true,
+              avgRating: true,
+              profile: {
+                select: {
+                  displayName: true,
+                  avatarUrl: true,
+                  location: true,
+                },
+              },
+              skills: {
+                select: {
+                  type: true,
+                  proficiencyLevel: true,
+                  skill: { select: { name: true } },
+                },
+              },
+            },
+          },
         },
         orderBy: { compatibilityScore: 'desc' },
         skip,
@@ -94,40 +147,6 @@ class MatchRepository {
     ]);
 
     return { matches, total };
-  }
-
-  /**
-   * Update the status of a match.
-   * @param {string} matchId
-   * @param {string} status - New status: 'accepted' | 'declined' | 'expired'
-   * @returns {Promise<Object>}
-   */
-  async updateStatus(matchId, status) {
-    return await prisma.match.update({
-      where: { id: matchId },
-      data: {
-        status,
-        isActive: status === 'accepted' || status === 'pending',
-      },
-    });
-  }
-
-  /**
-   * Expire all stale pending matches whose expiresAt has passed.
-   * Designed to be called by a cron job.
-   * @returns {Promise<{count: number}>}
-   */
-  async expireStaleMatches() {
-    return await prisma.match.updateMany({
-      where: {
-        status: 'pending',
-        expiresAt: { lt: new Date() },
-      },
-      data: {
-        status: 'expired',
-        isActive: false,
-      },
-    });
   }
 
   /**
@@ -151,13 +170,94 @@ class MatchRepository {
   }
 
   /**
-   * Get all active users except the given user and those they already
-   * have active matches with. Returns fully hydrated user objects.
+   * Update a match with arbitrary fields.
+   * @param {string} matchId
+   * @param {Object} updates - Fields to update (status, isActive, etc.)
+   * @returns {Promise<Object>}
+   */
+  async updateMatchStatus(matchId, updates) {
+    // Automatically set isActive based on status if status is being updated
+    const data = { ...updates };
+    if (data.status) {
+      data.isActive = data.status === 'accepted' || data.status === 'pending';
+    }
+
+    return await prisma.match.update({
+      where: { id: matchId },
+      data,
+    });
+  }
+
+  /**
+   * Find all expired matches (expiresAt < now AND isActive = true).
+   * @returns {Promise<Array>}
+   */
+  async getExpiredMatches() {
+    return await prisma.match.findMany({
+      where: {
+        isActive: true,
+        expiresAt: { lt: new Date() },
+      },
+      select: {
+        id: true,
+        userId1: true,
+        userId2: true,
+        status: true,
+        expiresAt: true,
+      },
+    });
+  }
+
+  /**
+   * Expire all stale pending matches whose expiresAt has passed.
+   * Designed to be called by a cron job.
+   * @returns {Promise<{count: number}>}
+   */
+  async expireStaleMatches() {
+    return await prisma.match.updateMany({
+      where: {
+        status: 'pending',
+        expiresAt: { lt: new Date() },
+      },
+      data: {
+        status: 'expired',
+        isActive: false,
+      },
+    });
+  }
+
+  /**
+   * Get match statistics for a user.
+   * @param {string} userId
+   * @returns {Promise<{totalMatches: number, acceptedMatches: number, declinedMatches: number}>}
+   */
+  async getMatchStats(userId) {
+    const whereBase = {
+      OR: [{ userId1: userId }, { userId2: userId }],
+    };
+
+    const [totalMatches, acceptedMatches, declinedMatches] = await Promise.all([
+      prisma.match.count({ where: whereBase }),
+      prisma.match.count({ where: { ...whereBase, status: 'accepted' } }),
+      prisma.match.count({ where: { ...whereBase, status: 'declined' } }),
+    ]);
+
+    return { totalMatches, acceptedMatches, declinedMatches };
+  }
+
+  /**
+   * Get all active candidate users, excluding the given user and those
+   * they already have active matches with.
+   *
+   * Performance:
+   *   - Limited to 200 candidates (pre-filter before scoring)
+   *   - Uses select with specific columns (never SELECT *)
+   *
    * @param {string} userId - The seeking user's ID
    * @returns {Promise<Array>}
    */
   async getActiveCandidatePool(userId) {
-    // First, find all user IDs this user is already matched with (active matches)
+    // Find all user IDs this user is already matched with (active matches)
     const existingMatches = await prisma.match.findMany({
       where: {
         isActive: true,
@@ -179,11 +279,35 @@ class MatchRepository {
         id: { notIn: Array.from(excludeIds) },
         isActive: true,
       },
-      include: {
-        profile: true,
-        skills: { include: { skill: true } },
-        availabilitySlots: true,
+      select: {
+        id: true,
+        avgRating: true,
+        profile: {
+          select: {
+            displayName: true,
+            avatarUrl: true,
+            location: true,
+            latitude: true,
+            longitude: true,
+          },
+        },
+        skills: {
+          select: {
+            skillId: true,
+            type: true,
+            proficiencyLevel: true,
+            skill: { select: { id: true, name: true } },
+          },
+        },
+        availabilitySlots: {
+          select: {
+            dayOfWeek: true,
+            slotStart: true,
+            slotEnd: true,
+          },
+        },
       },
+      take: 200, // Limit candidate pool for performance
     });
   }
 }

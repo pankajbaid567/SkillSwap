@@ -1,43 +1,37 @@
 const MatchingService = require('../services/matching.service');
-const SkillBasedStrategy = require('../strategies/skill-based.strategy');
-const LocationBasedStrategy = require('../strategies/location-based.strategy');
-const AIHybridStrategy = require('../strategies/ai-hybrid.strategy');
+const StrategyFactory = require('../factories/strategy.factory');
 const { sendSuccess } = require('../utils/response.util');
-
-/**
- * Strategy registry — maps query param values to strategy constructors.
- * Adding a new strategy only requires a new entry here (OCP).
- */
-const STRATEGY_MAP = {
-  skill: () => new SkillBasedStrategy(),
-  location: () => new LocationBasedStrategy(),
-  hybrid: () => new AIHybridStrategy(),
-};
 
 /**
  * Controller for the matching engine endpoints.
  * Creates a fresh MatchingService per request with the selected strategy.
+ *
+ * Strategy selection via query param:
+ *   ?strategy=skill     → SkillBasedStrategy (default)
+ *   ?strategy=location  → LocationBasedStrategy
+ *   ?strategy=hybrid    → AIHybridStrategy
  */
 class MatchingController {
   /**
    * GET /api/matches
    * Query params: ?strategy=skill|location|hybrid&page=1&limit=20
+   *
+   * Response shape:
+   * {
+   *   success: true,
+   *   data: {
+   *     matches: [...],
+   *     pagination: { page, limit, total },
+   *     meta: { strategy, computedAt, cached }
+   *   }
+   * }
    */
   async findMatches(req, res, next) {
     try {
       const strategyName = req.query.strategy || 'skill';
-      const strategyFactory = STRATEGY_MAP[strategyName];
+      const strategy = StrategyFactory.create(strategyName);
 
-      if (!strategyFactory) {
-        const error = new Error(
-          `Unknown strategy "${strategyName}". Supported: ${Object.keys(STRATEGY_MAP).join(', ')}`
-        );
-        error.statusCode = 400;
-        error.errorCode = 'INVALID_STRATEGY';
-        throw error;
-      }
-
-      const service = new MatchingService(strategyFactory());
+      const service = new MatchingService(strategy);
 
       const results = await service.findMatches(req.user.id, {
         page: req.query.page,
@@ -45,6 +39,23 @@ class MatchingController {
       });
 
       return sendSuccess(res, 200, 'Matches retrieved successfully', results);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/matches/stats
+   * Dashboard match statistics for the authenticated user.
+   *
+   * Response: { totalMatches, acceptedMatches, declinedMatches }
+   */
+  async getMatchStats(req, res, next) {
+    try {
+      const service = new MatchingService();
+      const stats = await service.getMatchStats(req.user.id);
+
+      return sendSuccess(res, 200, 'Match stats retrieved successfully', stats);
     } catch (error) {
       next(error);
     }
