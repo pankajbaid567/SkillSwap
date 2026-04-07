@@ -4,6 +4,11 @@ const { envConfig } = require('./config/env.config');
 const prisma = require('./config/db.config');
 const redisClient = require('./cache/redis.client');
 const logger = require('./utils/logger');
+const NotificationService = require('./services/notification.service');
+
+// Register swap event listeners (Observer pattern — decoupled from SwapService)
+const notificationService = new NotificationService();
+notificationService.registerListeners();
 
 const PORT = envConfig.PORT || 3000;
 

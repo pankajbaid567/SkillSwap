@@ -7,6 +7,7 @@ const errorHandler = require('./middlewares/error.middleware');
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
 const matchingRoutes = require('./routes/matching.routes');
+const swapRoutes = require('./routes/swap.routes');
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.use('/api', rateLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/matches', matchingRoutes);
+app.use('/api/swaps', swapRoutes);
 
 // Root Endpoint
 app.get('/', (req, res) => {
