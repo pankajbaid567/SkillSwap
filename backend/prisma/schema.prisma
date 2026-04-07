@@ -15,6 +15,8 @@ model User {
   isVerified   Boolean  @default(false)
   avgRating    Decimal  @default(0.0) @db.Decimal(3, 2)
   totalSwaps   Int      @default(0)
+  totalReviews Int      @default(0)
+  trustScore   Decimal  @default(0.0) @db.Decimal(5, 4)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -27,6 +29,8 @@ model User {
   swapsAsInitiator  Swap[]             @relation("SwapInitiator")
   swapsAsReceiver   Swap[]             @relation("SwapReceiver")
   completionConfirmations SwapCompletionConfirmation[]
+  reviewsGiven      Review[]           @relation("ReviewReviewer")
+  reviewsReceived   Review[]           @relation("ReviewReviewee")
 }
 
 model Profile {
@@ -174,6 +178,7 @@ model Swap {
   requestedSkill UserSkill @relation("RequestedSkill", fields: [requestedSkillId], references: [id])
   session        SwapSession?
   completionConfirmations SwapCompletionConfirmation[]
+  reviews        Review[]
 
   @@index([initiatorId])
   @@index([receiverId])
@@ -219,6 +224,27 @@ model SwapCompletionConfirmation {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([swapId, userId])
+  @@index([swapId])
+}
+
+model Review {
+  id         String   @id @default(uuid()) @db.Uuid
+  swapId     String   @db.Uuid
+  reviewerId String   @db.Uuid
+  revieweeId String   @db.Uuid
+  rating     Int      @db.SmallInt
+  comment    String?
+  isFlagged  Boolean  @default(false)
+  isPublic   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  swap     Swap @relation(fields: [swapId], references: [id], onDelete: Cascade)
+  reviewer User @relation("ReviewReviewer", fields: [reviewerId], references: [id], onDelete: Cascade)
+  reviewee User @relation("ReviewReviewee", fields: [revieweeId], references: [id], onDelete: Cascade)
+
+  @@unique([swapId, reviewerId])
+  @@index([revieweeId])
   @@index([swapId])
 }
 

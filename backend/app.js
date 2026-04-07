@@ -8,6 +8,10 @@ const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
 const matchingRoutes = require('./routes/matching.routes');
 const swapRoutes = require('./routes/swap.routes');
+const reviewRoutes = require('./routes/review.routes');
+const adminRoutes = require('./routes/admin.routes');
+const reviewController = require('./controllers/review.controller');
+const { verifyAccessToken } = require('./middlewares/auth.middleware');
 
 const app = express();
 
@@ -26,6 +30,11 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/matches', matchingRoutes);
 app.use('/api/swaps', swapRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/admin', adminRoutes);
+
+// User review route (public — GET /api/users/:id/reviews)
+app.get('/api/users/:id/reviews', verifyAccessToken, reviewController.getReviewsForUser);
 
 // Root Endpoint
 app.get('/', (req, res) => {
