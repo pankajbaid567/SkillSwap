@@ -26,6 +26,7 @@ model User {
   matchesAsUser2    Match[]            @relation("MatchUser2")
   swapsAsInitiator  Swap[]             @relation("SwapInitiator")
   swapsAsReceiver   Swap[]             @relation("SwapReceiver")
+  completionConfirmations SwapCompletionConfirmation[]
 }
 
 model Profile {
@@ -171,9 +172,53 @@ model Swap {
   receiver       User      @relation("SwapReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
   offeredSkill   UserSkill @relation("OfferedSkill", fields: [offeredSkillId], references: [id])
   requestedSkill UserSkill @relation("RequestedSkill", fields: [requestedSkillId], references: [id])
+  session        SwapSession?
+  completionConfirmations SwapCompletionConfirmation[]
 
   @@index([initiatorId])
   @@index([receiverId])
   @@index([status])
   @@index([matchId])
+  @@index([initiatorId, status])
+  @@index([receiverId, status])
 }
+
+enum SessionStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  MISSED
+}
+
+model SwapSession {
+  id               String        @id @default(uuid()) @db.Uuid
+  swapId           String        @unique @db.Uuid
+  scheduledAt      DateTime
+  durationMins     Int
+  status           SessionStatus @default(SCHEDULED)
+  meetingUrl       String?
+  notes            String?
+  rescheduledCount Int           @default(0)
+  createdAt        DateTime      @default(now())
+  completedAt      DateTime?
+
+  swap Swap @relation(fields: [swapId], references: [id], onDelete: Cascade)
+
+  @@index([swapId])
+  @@index([status])
+  @@index([scheduledAt])
+}
+
+model SwapCompletionConfirmation {
+  id          String   @id @default(uuid()) @db.Uuid
+  swapId      String   @db.Uuid
+  userId      String   @db.Uuid
+  confirmedAt DateTime @default(now())
+
+  swap Swap @relation(fields: [swapId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([swapId, userId])
+  @@index([swapId])
+}
+

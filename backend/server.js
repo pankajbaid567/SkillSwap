@@ -5,6 +5,7 @@ const prisma = require('./config/db.config');
 const redisClient = require('./cache/redis.client');
 const logger = require('./utils/logger');
 const NotificationService = require('./services/notification.service');
+const CronJobManager = require('./cron/session-reminders.cron');
 
 // Register swap event listeners (Observer pattern — decoupled from SwapService)
 const notificationService = new NotificationService();
@@ -17,6 +18,10 @@ async function startServer() {
     // Attempt DB connect validation
     await prisma.$connect();
     logger.info('Connected to database successfully');
+
+    // Start cron jobs
+    const cronManager = new CronJobManager();
+    cronManager.startAll();
 
     app.listen(PORT, () => {
       logger.info(`Server is running on port ${PORT}`);
