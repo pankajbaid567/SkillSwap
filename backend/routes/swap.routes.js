@@ -153,4 +153,28 @@ router.post('/:id/sessions', swapController.scheduleSession);
  */
 router.put('/:id/sessions/:sid/reschedule', swapController.rescheduleSession);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Review Routes (nested under swaps)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const reviewController = require('../controllers/review.controller');
+
+/**
+ * POST /api/swaps/:id/reviews
+ * Submit a review for a completed swap.
+ *
+ * Body: {
+ *   rating: number (1-5, required),
+ *   comment?: string,
+ *   isPublic?: boolean (default: true)
+ * }
+ */
+router.post('/:id/reviews', reviewController.submitReview);
+
+/**
+ * GET /api/swaps/:id/reviews
+ * Get both reviews for a swap (participant only).
+ */
+router.get('/:id/reviews', reviewController.getReviewsForSwap);
+
 module.exports = router;
