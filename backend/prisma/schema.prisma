@@ -4,6 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -23,6 +24,8 @@ model User {
   availabilitySlots AvailabilitySlot[]
   matchesAsUser1    Match[]            @relation("MatchUser1")
   matchesAsUser2    Match[]            @relation("MatchUser2")
+  swapsAsInitiator  Swap[]             @relation("SwapInitiator")
+  swapsAsReceiver   Swap[]             @relation("SwapReceiver")
 }
 
 model Profile {
@@ -94,8 +97,10 @@ model UserSkill {
   isVerified       Boolean          @default(false)
   addedAt          DateTime         @default(now())
 
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  user             User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill            Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  swapsAsOffered   Swap[] @relation("OfferedSkill")
+  swapsAsRequested Swap[] @relation("RequestedSkill")
 
   @@index([userId, type])
 }
@@ -125,10 +130,50 @@ model Match {
   matchedAt          DateTime @default(now())
   expiresAt          DateTime
 
-  user1 User @relation("MatchUser1", fields: [userId1], references: [id], onDelete: Cascade)
-  user2 User @relation("MatchUser2", fields: [userId2], references: [id], onDelete: Cascade)
+  user1 User  @relation("MatchUser1", fields: [userId1], references: [id], onDelete: Cascade)
+  user2 User  @relation("MatchUser2", fields: [userId2], references: [id], onDelete: Cascade)
+  swaps Swap[]
 
   @@index([userId1])
   @@index([userId2])
   @@index([status])
+}
+
+enum SwapStatus {
+  PENDING
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+model Swap {
+  id                String     @id @default(uuid()) @db.Uuid
+  matchId           String     @db.Uuid
+  initiatorId       String     @db.Uuid
+  receiverId        String     @db.Uuid
+  offeredSkillId    String     @db.Uuid
+  requestedSkillId  String     @db.Uuid
+  status            SwapStatus @default(PENDING)
+  terms             String?
+  scheduledAt       DateTime?
+  completedAt       DateTime?
+  cancelReason      String?
+  initiatorConfirmed Boolean   @default(false)
+  receiverConfirmed  Boolean   @default(false)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  expiresAt         DateTime?
+
+  match          Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  initiator      User      @relation("SwapInitiator", fields: [initiatorId], references: [id], onDelete: Cascade)
+  receiver       User      @relation("SwapReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  offeredSkill   UserSkill @relation("OfferedSkill", fields: [offeredSkillId], references: [id])
+  requestedSkill UserSkill @relation("RequestedSkill", fields: [requestedSkillId], references: [id])
+
+  @@index([initiatorId])
+  @@index([receiverId])
+  @@index([status])
+  @@index([matchId])
 }

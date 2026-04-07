@@ -40,7 +40,12 @@ class UserRepository {
   async findById(id) {
     return await prisma.user.findUnique({
       where: { id },
-      include: { profile: true }
+      include: {
+        profile: true,
+        skills: {
+          include: { skill: true }
+        }
+      }
     });
   }
 
