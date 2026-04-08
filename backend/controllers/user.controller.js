@@ -30,6 +30,15 @@ class UserController {
     }
   }
 
+  async updateNotificationPreferences(req, res, next) {
+    try {
+      const data = await userService.updateNotificationPreferences(req.user.id, req.body);
+      return sendSuccess(res, 200, 'Notification preferences updated', data);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async searchUsers(req, res, next) {
     try {
       const query = req.query.q || '';

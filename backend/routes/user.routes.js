@@ -61,12 +61,29 @@ const addAvailabilitySlotSchema = z.object({
   isRecurring: z.boolean().default(false)
 });
 
+/**
+ * @typedef {Object} UpdateNotificationPreferencesDto
+ * @property {boolean} [notifyEmail]
+ * @property {boolean} [notifyPush]
+ * @property {boolean} [notifyInApp]
+ */
+const updateNotificationPreferencesSchema = z.object({
+  notifyEmail: z.boolean().optional(),
+  notifyPush: z.boolean().optional(),
+  notifyInApp: z.boolean().optional(),
+});
+
 // Search Route (Has to be mapped before /:id)
 router.get('/search', userController.searchUsers);
 
 // Profile Routes
 router.get('/me', userController.getOwnProfile);
 router.put('/me', validateBody(updateProfileSchema), userController.updateProfile);
+router.put(
+  '/me/notification-preferences',
+  validateBody(updateNotificationPreferencesSchema),
+  userController.updateNotificationPreferences
+);
 
 // Skills Routes
 router.post('/me/skills', validateBody(addSkillSchema), userController.addSkill);

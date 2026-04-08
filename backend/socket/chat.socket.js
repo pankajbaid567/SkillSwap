@@ -33,6 +33,9 @@ const setupSocket = (httpServer) => {
   io.on('connection', (socket) => {
     logger.info(`User connected to chat socket: ${socket.user.id}`);
 
+    // Join per-user room for in-app notifications
+    socket.join(`user:${socket.user.id}`);
+
     // chat:join
     socket.on('chat:join', async ({ swapId }) => {
       try {

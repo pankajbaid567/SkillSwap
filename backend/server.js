@@ -8,10 +8,9 @@ const NotificationService = require('./services/notification.service');
 const CronJobManager = require('./cron/session-reminders.cron');
 const { createServer } = require('http');
 const { setupSocket } = require('./socket/chat.socket');
-
-// Register swap event listeners (Observer pattern — decoupled from SwapService)
-const notificationService = new NotificationService();
-notificationService.registerListeners();
+const EmailObserver = require('./observers/email.observer');
+const PushObserver = require('./observers/push.observer');
+const InAppObserver = require('./observers/inapp.observer');
 
 const PORT = envConfig.PORT || 3000;
 
@@ -26,7 +25,14 @@ async function startServer() {
     cronManager.startAll();
 
     const httpServer = createServer(app);
-    setupSocket(httpServer);
+    const io = setupSocket(httpServer);
+
+    // Phase 4B wiring: Subject + concrete observers
+    const notificationService = new NotificationService();
+    notificationService.addObserver(new EmailObserver());
+    notificationService.addObserver(new PushObserver());
+    notificationService.addObserver(new InAppObserver(io));
+    notificationService.registerListeners();
 
     httpServer.listen(PORT, () => {
       logger.info(`Server is running on port ${PORT}`);

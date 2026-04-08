@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
@@ -32,6 +33,7 @@ model User {
   reviewsGiven      Review[]           @relation("ReviewReviewer")
   reviewsReceived   Review[]           @relation("ReviewReviewee")
   messagesSent      Message[]
+  notifications     Notification[]
 }
 
 model Profile {
@@ -44,6 +46,10 @@ model Profile {
   timezone    String?
   latitude    Decimal? @db.Decimal(10, 7)
   longitude   Decimal? @db.Decimal(10, 7)
+  notifyEmail Boolean  @default(true)
+  notifyPush  Boolean  @default(true)
+  notifyInApp Boolean  @default(true)
+  pushToken   String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -283,5 +289,25 @@ model Message {
 
   @@index([chatId, sentAt(sort: Desc)])
   @@index([chatId, isRead])
+}
+
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  type      String
+  title     String
+  body      String   @db.Text
+  payload   Json?
+  isRead    Boolean  @default(false)
+  channel   String
+  createdAt DateTime @default(now())
+  readAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, isRead])
+  @@index([type])
+  @@index([channel])
 }
 

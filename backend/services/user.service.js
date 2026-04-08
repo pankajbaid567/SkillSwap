@@ -58,6 +58,18 @@ class UserService {
     return updatedProfile;
   }
 
+  async updateNotificationPreferences(userId, dto) {
+    await this.getProfile(userId);
+
+    const updatedProfile = await this.userRepository.updateProfile(userId, {
+      notifyEmail: dto.notifyEmail,
+      notifyPush: dto.notifyPush,
+      notifyInApp: dto.notifyInApp,
+    });
+
+    return updatedProfile;
+  }
+
   async addSkill(userId, skillDto) {
     // Validate if the skill actually exists in the system (or Prisma would throw an FK error)
     // Here we let Prisma relational constraints handle it, but we could explicitly check via repo constraint

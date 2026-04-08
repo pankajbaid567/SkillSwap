@@ -11,6 +11,7 @@ const swapRoutes = require('./routes/swap.routes');
 const reviewRoutes = require('./routes/review.routes');
 const adminRoutes = require('./routes/admin.routes');
 const chatRoutes = require('./routes/chat.routes');
+const notificationRoutes = require('./routes/notification.routes');
 const reviewController = require('./controllers/review.controller');
 const { verifyAccessToken } = require('./middlewares/auth.middleware');
 
@@ -34,6 +35,7 @@ app.use('/api/swaps', swapRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/chats', chatRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // User review route (public — GET /api/users/:id/reviews)
 app.get('/api/users/:id/reviews', verifyAccessToken, reviewController.getReviewsForUser);
