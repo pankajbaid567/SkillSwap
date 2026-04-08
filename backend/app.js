@@ -10,6 +10,7 @@ const matchingRoutes = require('./routes/matching.routes');
 const swapRoutes = require('./routes/swap.routes');
 const reviewRoutes = require('./routes/review.routes');
 const adminRoutes = require('./routes/admin.routes');
+const chatRoutes = require('./routes/chat.routes');
 const reviewController = require('./controllers/review.controller');
 const { verifyAccessToken } = require('./middlewares/auth.middleware');
 
@@ -32,6 +33,7 @@ app.use('/api/matches', matchingRoutes);
 app.use('/api/swaps', swapRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/chats', chatRoutes);
 
 // User review route (public — GET /api/users/:id/reviews)
 app.get('/api/users/:id/reviews', verifyAccessToken, reviewController.getReviewsForUser);

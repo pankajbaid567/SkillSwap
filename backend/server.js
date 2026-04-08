@@ -6,6 +6,8 @@ const redisClient = require('./cache/redis.client');
 const logger = require('./utils/logger');
 const NotificationService = require('./services/notification.service');
 const CronJobManager = require('./cron/session-reminders.cron');
+const { createServer } = require('http');
+const { setupSocket } = require('./socket/chat.socket');
 
 // Register swap event listeners (Observer pattern — decoupled from SwapService)
 const notificationService = new NotificationService();
@@ -23,7 +25,10 @@ async function startServer() {
     const cronManager = new CronJobManager();
     cronManager.startAll();
 
-    app.listen(PORT, () => {
+    const httpServer = createServer(app);
+    setupSocket(httpServer);
+
+    httpServer.listen(PORT, () => {
       logger.info(`Server is running on port ${PORT}`);
     });
   } catch (error) {

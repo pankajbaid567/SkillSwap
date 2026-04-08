@@ -31,6 +31,7 @@ model User {
   completionConfirmations SwapCompletionConfirmation[]
   reviewsGiven      Review[]           @relation("ReviewReviewer")
   reviewsReceived   Review[]           @relation("ReviewReviewee")
+  messagesSent      Message[]
 }
 
 model Profile {
@@ -177,6 +178,7 @@ model Swap {
   offeredSkill   UserSkill @relation("OfferedSkill", fields: [offeredSkillId], references: [id])
   requestedSkill UserSkill @relation("RequestedSkill", fields: [requestedSkillId], references: [id])
   session        SwapSession?
+  chat           Chat?
   completionConfirmations SwapCompletionConfirmation[]
   reviews        Review[]
 
@@ -246,5 +248,40 @@ model Review {
   @@unique([swapId, reviewerId])
   @@index([revieweeId])
   @@index([swapId])
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  SYSTEM
+}
+
+model Chat {
+  id        String   @id @default(uuid()) @db.Uuid
+  swapId    String   @unique @db.Uuid
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  swap      Swap     @relation(fields: [swapId], references: [id], onDelete: Cascade)
+  messages  Message[]
+}
+
+model Message {
+  id        String      @id @default(uuid()) @db.Uuid
+  chatId    String      @db.Uuid
+  senderId  String      @db.Uuid
+  content   String      @db.Text
+  msgType   MessageType @default(TEXT)
+  isRead    Boolean     @default(false)
+  sentAt    DateTime    @default(now())
+  readAt    DateTime?
+  isDeleted Boolean     @default(false)
+
+  chat      Chat        @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender    User        @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([chatId, sentAt(sort: Desc)])
+  @@index([chatId, isRead])
 }
 
