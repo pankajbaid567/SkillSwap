@@ -1,70 +1,159 @@
-import { ArrowRightLeft, MapPin, Sparkles } from 'lucide-react';
+import { ArrowRightLeft, Info, MapPin, Sparkles, Star, UserPlus } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { formatCount, truncateText } from '../utils/formatters';
 
-const MatchCard = ({ match, onAccept, onDecline }) => {
+const CircularProgress = ({ value, label }) => {
+  const percentage = Math.min(100, Math.max(0, value));
+  
+  return (
+    <div className="relative flex items-center justify-center h-14 w-14 rounded-full bg-slate-950/50">
+      <svg className="h-full w-full transform -rotate-90" viewBox="0 0 36 36">
+        <circle cx="18" cy="18" r="16" fill="none" className="stroke-white/10" strokeWidth="4" />
+        <circle 
+          cx="18" 
+          cy="18" 
+          r="16" 
+          fill="none" 
+          className="stroke-cyan-400" 
+          strokeWidth="4" 
+          strokeDasharray={`${percentage} 100`} 
+          strokeLinecap="round" 
+        />
+      </svg>
+      <div className="absolute flex flex-col items-center">
+        <span className="text-[10px] uppercase text-cyan-200/80 leading-none">{label}</span>
+        <span className="text-sm font-bold text-white leading-tight">{percentage}%</span>
+      </div>
+    </div>
+  );
+};
+
+const MatchCard = ({ match, onAccept, onDecline, onExplain, compact = false }) => {
   const displayName = match?.user?.displayName || match?.user?.name || match?.displayName || match?.name || 'Potential match';
   const location = match?.location || match?.user?.location || 'Remote friendly';
+  const rating = match?.user?.avgRating || match?.avgRating;
   const score = match?.score ?? match?.compatibilityScore ?? match?.matchScore ?? null;
   const offers = match?.offeredSkills || match?.skillsOffered || match?.skills?.offered || [];
   const wants = match?.wantedSkills || match?.skillsWanted || match?.skills?.wanted || [];
 
   return (
-    <article className="group relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-5 shadow-xl shadow-black/10 transition hover:-translate-y-1 hover:bg-white/[0.075]">
+    <article className={`group relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 ${compact ? 'p-4' : 'p-5'} shadow-xl shadow-black/10 transition hover:-translate-y-1 hover:bg-white/[0.075] flex flex-col`}>
       <div className="absolute inset-0 bg-gradient-to-br from-cyan-400/10 via-transparent to-emerald-400/10 opacity-0 transition group-hover:opacity-100" />
+      
       <div className="relative flex items-start justify-between gap-4">
-        <div>
-          <p className="text-lg font-semibold text-white">{displayName}</p>
-          <div className="mt-2 flex items-center gap-2 text-sm text-white/55">
-            <MapPin className="h-4 w-4 text-cyan-300" />
-            <span>{location}</span>
+        <div className="flex gap-4">
+          <div className="h-12 w-12 rounded-full overflow-hidden bg-slate-800 flex-shrink-0">
+            {match?.user?.avatarUrl ? (
+              <img src={match.user.avatarUrl} alt={displayName} className="h-full w-full object-cover" />
+            ) : (
+              <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-cyan-400 to-emerald-400 text-slate-950 font-bold text-lg">
+                {displayName.charAt(0)}
+              </div>
+            )}
+          </div>
+          <div>
+            <p className="text-lg font-semibold text-white leading-tight">{displayName}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-white/55">
+              <span className="flex items-center gap-1">
+                <MapPin className="h-3.5 w-3.5 text-cyan-300" />
+                {location}
+              </span>
+              {rating !== undefined && (
+                <span className="flex items-center gap-1 text-amber-300/80">
+                  <Star className="h-3.5 w-3.5 fill-amber-300/80" />
+                  {rating.toFixed(1)}
+                </span>
+              )}
+            </div>
           </div>
         </div>
+        
         {score !== null && score !== undefined && (
-          <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-right">
-            <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-200/80">Match</p>
-            <p className="text-xl font-semibold text-cyan-100">{formatCount(score)}</p>
-          </div>
+           <CircularProgress value={score} label="Match" />
         )}
       </div>
 
-      <div className="relative mt-5 grid gap-3 sm:grid-cols-[1fr_auto_1fr]">
-        <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
-          <p className="text-xs uppercase tracking-[0.24em] text-emerald-200/70">Offers</p>
-          <p className="mt-2 text-sm text-white/85">
-            {truncateText((offers || []).map((item) => item.name || item.title || item).join(', ') || 'Flexible sessions and practical exchange.', 80)}
-          </p>
+      {!compact && (
+        <div className="relative mt-5 grid gap-3 sm:grid-cols-[1fr_auto_1fr] flex-1">
+          <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-300/80 mb-2">They offer (You want)</p>
+            <div className="flex flex-wrap gap-1.5">
+              {offers.length > 0 ? offers.map((item, idx) => (
+                <span key={idx} className="bg-emerald-400/10 text-emerald-300/90 border border-emerald-400/20 px-2 py-1 rounded text-xs">
+                  {typeof item === 'string' ? item : (item.name || item.title)}
+                </span>
+              )) : (
+                <span className="text-xs text-white/40">Flexible skills</span>
+              )}
+            </div>
+          </div>
+          
+          <div className="flex items-center justify-center text-cyan-500/50">
+            <ArrowRightLeft className="h-4 w-4" />
+          </div>
+          
+          <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-indigo-300/80 mb-2">They want (You offer)</p>
+            <div className="flex flex-wrap gap-1.5">
+              {wants.length > 0 ? wants.map((item, idx) => (
+                <span key={idx} className="bg-indigo-400/10 text-indigo-300/90 border border-indigo-400/20 px-2 py-1 rounded text-xs">
+                  {typeof item === 'string' ? item : (item.name || item.title)}
+                </span>
+              )) : (
+                <span className="text-xs text-white/40">Open to matching</span>
+              )}
+            </div>
+          </div>
         </div>
-        <div className="flex items-center justify-center text-cyan-300">
-          <ArrowRightLeft className="h-5 w-5" />
-        </div>
-        <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
-          <p className="text-xs uppercase tracking-[0.24em] text-cyan-200/70">Wants</p>
-          <p className="mt-2 text-sm text-white/85">
-            {truncateText((wants || []).map((item) => item.name || item.title || item).join(', ') || 'A reciprocal exchange that fits your schedule.', 80)}
-          </p>
-        </div>
-      </div>
+      )}
 
-      <div className="relative mt-5 flex items-center justify-between gap-3">
-        <div className="inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-2 text-xs text-white/55">
-          <Sparkles className="h-3.5 w-3.5 text-cyan-300" />
-          AI-curated fit
-        </div>
+      <div className={`relative ${compact ? 'mt-4' : 'mt-5 pt-4 border-t border-white/10'} flex items-center justify-between gap-3`}>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => onDecline?.(match)}
-            className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/70 transition hover:bg-rose-500/15 hover:text-rose-100"
-          >
-            Pass
-          </button>
-          <button
-            type="button"
-            onClick={() => onAccept?.(match)}
-            className="rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:opacity-95"
-          >
-            Accept
-          </button>
+          {!compact && onExplain && (
+            <button
+              type="button"
+              onClick={() => onExplain(match)}
+              className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 h-9 w-9 text-white/55 transition hover:bg-white/10 hover:text-white"
+              title="See Why"
+            >
+              <Info className="h-4 w-4" />
+            </button>
+          )}
+          {!compact && (
+            <Link 
+              to={`/profile/${match?.user?.id || match?.id}`}
+              className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 h-9 w-9 text-white/55 transition hover:bg-white/10 hover:text-white"
+              title="View Profile"
+            >
+              <UserPlus className="h-4 w-4" />
+            </Link>
+          )}
+          {compact && (
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 text-[10px] text-white/50">
+              <Sparkles className="h-3 w-3 text-cyan-300" /> Curated
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {(onDecline && !compact) && (
+            <button
+              type="button"
+              onClick={() => onDecline?.(match)}
+              className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-white/70 transition hover:bg-rose-500/15 hover:text-rose-100"
+            >
+              Pass
+            </button>
+          )}
+          {onAccept && (
+            <button
+              type="button"
+              onClick={() => onAccept?.(match)}
+              className="rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400 px-4 py-2 text-xs font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:opacity-95"
+            >
+              Accept Match
+            </button>
+          )}
         </div>
       </div>
     </article>
