@@ -22,12 +22,25 @@ export const useSwap = (swapId, params = {}) => {
     staleTime: 30_000,
   });
 
+  const statsQuery = useQuery({
+    queryKey: ['swap-stats'],
+    queryFn: () => swapAPI.getSwapStats(),
+    staleTime: 60_000,
+  });
+
+  const upcomingSessionsQuery = useQuery({
+    queryKey: ['upcoming-sessions'],
+    queryFn: () => swapAPI.getUpcomingSessions(),
+    staleTime: 30_000,
+  });
+
   const createSwapMutation = useMutation({
     mutationFn: (payload) => swapAPI.createSwap(payload),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['swaps'] }),
         queryClient.invalidateQueries({ queryKey: ['active-swaps'] }),
+        queryClient.invalidateQueries({ queryKey: ['swap-stats'] }),
       ]);
     },
   });
@@ -39,6 +52,7 @@ export const useSwap = (swapId, params = {}) => {
         queryClient.invalidateQueries({ queryKey: ['swaps'] }),
         queryClient.invalidateQueries({ queryKey: ['swap', swapId] }),
         queryClient.invalidateQueries({ queryKey: ['active-swaps'] }),
+        queryClient.invalidateQueries({ queryKey: ['swap-stats'] }),
       ]);
     },
   });
@@ -50,25 +64,39 @@ export const useSwap = (swapId, params = {}) => {
         queryClient.invalidateQueries({ queryKey: ['swaps'] }),
         queryClient.invalidateQueries({ queryKey: ['swap', swapId] }),
         queryClient.invalidateQueries({ queryKey: ['active-swaps'] }),
+        queryClient.invalidateQueries({ queryKey: ['swap-stats'] }),
       ]);
     },
   });
 
   const completeSwapMutation = useMutation({
     mutationFn: (id) => swapAPI.confirmComplete(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['swap', swapId] }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['swap', swapId] }),
+        queryClient.invalidateQueries({ queryKey: ['active-swaps'] }),
+        queryClient.invalidateQueries({ queryKey: ['swap-stats'] }),
+      ]);
+    },
   });
 
   const scheduleSessionMutation = useMutation({
     mutationFn: ({ id, payload }) => swapAPI.scheduleSession(id, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['swap', swapId] }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['swap', swapId] }),
+        queryClient.invalidateQueries({ queryKey: ['upcoming-sessions'] }),
+      ]);
+    },
   });
 
   return {
     swap: swapQuery.data || null,
     swaps: swapsQuery.data?.swaps || swapsQuery.data || [],
     activeSwaps: activeSwapsQuery.data?.swaps || activeSwapsQuery.data || [],
-    isLoading: swapQuery.isLoading || swapsQuery.isLoading || activeSwapsQuery.isLoading,
+    swapStats: statsQuery.data || {},
+    upcomingSessions: upcomingSessionsQuery.data?.sessions || upcomingSessionsQuery.data || [],
+    isLoading: swapQuery.isLoading || swapsQuery.isLoading || activeSwapsQuery.isLoading || upcomingSessionsQuery.isLoading,
     error: swapQuery.error || swapsQuery.error || activeSwapsQuery.error,
     refetchSwap: swapQuery.refetch,
     refetchSwaps: swapsQuery.refetch,

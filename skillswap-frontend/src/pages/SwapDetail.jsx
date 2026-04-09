@@ -1,23 +1,26 @@
 import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { CalendarClock, CircleCheckBig, TimerReset } from 'lucide-react';
+import { BadgeCheck, CalendarClock, TimerReset, Video, MessageSquare } from 'lucide-react';
 import ChatWindow from '../components/ChatWindow';
 import SwapCard from '../components/SwapCard';
 import { useSwap } from '../hooks/useSwap';
 import { useChat } from '../hooks/useChat';
 import { formatDateTime } from '../utils/formatters';
 
+const swapSteps = ['PENDING', 'ACCEPTED', 'ACTIVE', 'COMPLETED'];
+
 const SwapDetail = () => {
   const { swapId } = useParams();
   const { swap, isLoading, acceptSwap, cancelSwap, confirmComplete, scheduleSession } = useSwap(swapId);
-  const { messages } = useChat(swapId);
+  const { messages, sendMessage, sendTyping, isTyping } = useChat(swapId);
 
-  const actionHints = useMemo(() => ([
-    'Accept to move the swap into an active state.',
-    'Cancel with a reason when the exchange is no longer viable.',
-    'Schedule a session once the swap is confirmed.',
-  ]), []);
+  // Derive current step index
+  const currentStepIdx = useMemo(() => {
+    if (!swap?.status) return 0;
+    if (swap.status === 'CANCELLED') return -1;
+    return swapSteps.indexOf(swap.status.toUpperCase());
+  }, [swap?.status]);
 
   const handleSchedule = async () => {
     try {
@@ -73,46 +76,130 @@ const SwapDetail = () => {
   return (
     <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
       <div className="space-y-6">
-        <SwapCard swap={swap} />
-
+        {/* Header and Swap Overview */}
         <section className="rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-xl shadow-black/10 backdrop-blur-xl">
-          <p className="text-sm font-medium uppercase tracking-[0.24em] text-white/45">Swap timeline</p>
-          <div className="mt-5 space-y-4 text-sm text-white/65">
-            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/40 p-4">
-              <CalendarClock className="h-4 w-4 text-cyan-300" />
-              Created {formatDateTime(swap.createdAt)}
-            </div>
-            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/40 p-4">
-              <TimerReset className="h-4 w-4 text-cyan-300" />
-              Scheduled {swap.scheduledAt ? formatDateTime(swap.scheduledAt) : 'Not scheduled yet'}
-            </div>
-            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/40 p-4">
-              <CircleCheckBig className="h-4 w-4 text-cyan-300" />
-              Status {swap.status || 'PENDING'}
-            </div>
+           <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
+             <h1 className="text-2xl font-bold text-white">Swap Details</h1>
+             <span className={`px-3 py-1 text-[10px] uppercase font-bold tracking-widest rounded-full ${swap.status === 'COMPLETED' ? 'bg-emerald-400/20 text-emerald-300 border border-emerald-400/30' : swap.status === 'CANCELLED' ? 'bg-rose-400/20 text-rose-300 border border-rose-400/30' : 'bg-cyan-400/20 text-cyan-300 border border-cyan-400/30'}`}>
+                {swap.status || 'PENDING'}
+             </span>
+           </div>
+           
+           <div className="grid md:grid-cols-2 gap-4">
+              <div className="rounded-2xl bg-slate-950/40 p-4 border border-white/5 flex items-center gap-3">
+                 <div className="h-10 w-10 bg-cyan-400/20 rounded-full flex items-center justify-center text-cyan-400">
+                   {swap.initiator?.avatarUrl ? <img src={swap.initiator.avatarUrl} alt="" className="rounded-full h-full w-full object-cover"/> : swap.initiator?.displayName?.charAt(0) || 'I'}
+                 </div>
+                 <div>
+                   <p className="text-xs uppercase text-white/40 tracking-wider">Initiator</p>
+                   <p className="text-sm font-semibold text-white">{swap.initiator?.displayName || swap.initiator?.name}</p>
+                 </div>
+              </div>
+              <div className="rounded-2xl bg-slate-950/40 p-4 border border-white/5 flex items-center gap-3">
+                 <div className="h-10 w-10 bg-emerald-400/20 rounded-full flex items-center justify-center text-emerald-400">
+                   {swap.receiver?.avatarUrl ? <img src={swap.receiver.avatarUrl} alt="" className="rounded-full h-full w-full object-cover"/> : swap.receiver?.displayName?.charAt(0) || 'R'}
+                 </div>
+                 <div>
+                   <p className="text-xs uppercase text-white/40 tracking-wider">Receiver</p>
+                   <p className="text-sm font-semibold text-white">{swap.receiver?.displayName || swap.receiver?.name}</p>
+                 </div>
+              </div>
+           </div>
+        </section>
+
+        {/* Timeline Visualizer */}
+        <section className="rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-xl shadow-black/10 backdrop-blur-xl">
+          <p className="text-sm font-medium uppercase tracking-[0.24em] text-white/45 mb-6">Status Timeline</p>
+          <div className="relative flex justify-between items-center max-w-lg mx-auto">
+             {/* Line background */}
+             <div className="absolute left-[10%] right-[10%] top-1/2 -translate-y-1/2 h-1 bg-white/10 -z-10 rounded" />
+             {/* Line active */}
+             {currentStepIdx >= 0 && (
+               <div 
+                 className="absolute left-[10%] top-1/2 -translate-y-1/2 h-1 bg-cyan-400 shadow-[0_0_10px_cyan] -z-10 rounded transition-all duration-700" 
+                 style={{ width: `${Math.max(0, (currentStepIdx / (swapSteps.length - 1)) * 80)}%` }} 
+               />
+             )}
+             
+             {swapSteps.map((step, idx) => {
+               const isCompleted = idx < currentStepIdx;
+               const isCurrent = idx === currentStepIdx;
+               const isCancelled = swap.status === 'CANCELLED';
+               
+               return (
+                 <div key={step} className="flex flex-col items-center gap-2">
+                   <div className={`h-8 w-8 rounded-full flex items-center justify-center transition ${isCompleted ? 'bg-cyan-400 text-slate-950' : isCurrent ? 'bg-slate-950 border-2 border-cyan-400 text-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.5)]' : isCancelled ? 'bg-slate-800 text-slate-500' : 'bg-slate-800 text-slate-400'}`}>
+                     {isCompleted ? <BadgeCheck className="h-4 w-4" /> : <span className="text-xs font-bold">{idx + 1}</span>}
+                   </div>
+                   <span className={`text-[10px] font-bold tracking-widest uppercase ${isCurrent ? 'text-cyan-300' : 'text-white/40'}`}>{step}</span>
+                 </div>
+               );
+             })}
           </div>
         </section>
 
-        <section className="rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-xl shadow-black/10 backdrop-blur-xl">
-          <p className="text-sm font-medium uppercase tracking-[0.24em] text-white/45">Next actions</p>
-          <ul className="mt-4 space-y-3 text-sm text-white/60">
-            {actionHints.map((hint) => (
-              <li key={hint} className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">{hint}</li>
-            ))}
-          </ul>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <button onClick={handleAccept} type="button" className="rounded-full bg-cyan-400 px-4 py-2 font-semibold text-slate-950 transition hover:opacity-95">Accept</button>
-            <button onClick={handleSchedule} type="button" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 font-semibold text-white transition hover:bg-white/10">Schedule session</button>
-            <button onClick={handleConfirm} type="button" className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-2 font-semibold text-emerald-100 transition hover:bg-emerald-400/15">Confirm complete</button>
-            <button onClick={handleCancel} type="button" className="rounded-full border border-rose-400/20 bg-rose-400/10 px-4 py-2 font-semibold text-rose-100 transition hover:bg-rose-400/15">Cancel</button>
-          </div>
-        </section>
+        {/* Upcoming Session & Next Actions */}
+        <div className="grid sm:grid-cols-2 gap-6">
+           <section className="rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-xl shadow-black/10 backdrop-blur-xl flex flex-col">
+             <p className="text-sm font-medium uppercase tracking-[0.24em] text-white/45 mb-4">First Session</p>
+             <div className="flex-1 flex flex-col justify-center items-center text-center p-6 border border-white/5 bg-slate-950/30 rounded-2xl">
+               {swap.sessions && swap.sessions.length > 0 ? (
+                 <>
+                   <CalendarClock className="h-8 w-8 text-cyan-300 mb-3" />
+                   <p className="text-white font-medium">{formatDateTime(swap.sessions[0].scheduledAt)}</p>
+                   {swap.sessions[0].meetingLink && (
+                     <a href={swap.sessions[0].meetingLink} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 transition rounded-full text-xs font-bold text-white">
+                        <Video className="h-3 w-3" /> Join Call
+                     </a>
+                   )}
+                 </>
+               ) : (
+                 <>
+                   <TimerReset className="h-8 w-8 text-white/20 mb-3" />
+                   <p className="text-white/40 text-sm">No session scheduled yet.</p>
+                 </>
+               )}
+             </div>
+           </section>
+           
+           <section className="rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-xl shadow-black/10 backdrop-blur-xl flex flex-col">
+             <p className="text-sm font-medium uppercase tracking-[0.24em] text-white/45 mb-4">Actions</p>
+             <div className="flex flex-col gap-3 justify-center flex-1">
+                {swap.status === 'PENDING' && (
+                  <>
+                    <button onClick={handleAccept} className="w-full rounded-full bg-cyan-400 py-3 text-sm font-semibold text-slate-950 transition hover:opacity-95">Accept Swap</button>
+                    <button onClick={handleCancel} className="w-full rounded-full border border-white/10 bg-white/5 py-3 text-sm font-semibold text-white/70 transition hover:bg-white/10">Decline/Cancel</button>
+                  </>
+                )}
+                {(swap.status === 'ACCEPTED' || swap.status === 'ACTIVE') && (
+                  <>
+                    {(!swap.sessions || swap.sessions.length === 0) && (
+                      <button onClick={handleSchedule} className="w-full rounded-full border border-indigo-400/30 bg-indigo-500/10 py-3 text-sm font-semibold text-indigo-300 transition hover:bg-indigo-500/20">Schedule Session</button>
+                    )}
+                    <button onClick={handleConfirm} className="w-full rounded-full border border-emerald-400/30 bg-emerald-500/10 py-3 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/20">Mark Completed</button>
+                  </>
+                )}
+                {swap.status === 'COMPLETED' && (
+                  <button className="w-full flex items-center justify-center gap-2 rounded-full border border-amber-400/30 bg-amber-500/10 py-3 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/20">
+                    <MessageSquare className="h-4 w-4" /> Leave Review
+                  </button>
+                )}
+                {swap.status === 'CANCELLED' && (
+                  <p className="text-center text-sm text-white/40 italic">This swap is inactive.</p>
+                )}
+             </div>
+           </section>
+        </div>
       </div>
 
       <ChatWindow
-        title="Swap chat"
+        title="Active Chat"
         subtitle="Keep the coordination in one place"
         messages={messages}
+        onSend={(content) => sendMessage(content)}
+        onTyping={sendTyping}
+        isTyping={isTyping}
+        active={swap.status !== 'CANCELLED'}
       />
     </div>
   );

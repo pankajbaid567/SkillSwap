@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { io } from 'socket.io-client';
 import { useAuthContext } from './AuthContext';
+import { authAPI } from '../services/api.service';
 
 const SocketContext = createContext(null);
 let socketClient = null;
@@ -31,13 +32,27 @@ export const SocketProvider = ({ children }) => {
 
     const handleConnect = () => setConnected(true);
     const handleDisconnect = () => setConnected(false);
+    
+    const handleConnectError = async (error) => {
+      if (error.message.includes('Authentication error') || error.message.includes('token')) {
+        try {
+          await authAPI.refreshToken();
+          // The token change will naturally re-run this effect since it's in the dependency array
+        } catch (refreshErr) {
+          console.error('[Socket] Failed to refresh token:', refreshErr);
+          client.disconnect();
+        }
+      }
+    };
 
     client.on('connect', handleConnect);
     client.on('disconnect', handleDisconnect);
+    client.on('connect_error', handleConnectError);
 
     return () => {
       client.off('connect', handleConnect);
       client.off('disconnect', handleDisconnect);
+      client.off('connect_error', handleConnectError);
       client.disconnect();
       if (socketClient === client) {
         socketClient = null;
