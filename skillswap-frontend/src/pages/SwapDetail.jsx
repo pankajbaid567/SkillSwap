@@ -1,19 +1,43 @@
-import { useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { BadgeCheck, CalendarClock, TimerReset, Video, MessageSquare } from 'lucide-react';
+import { BadgeCheck, CalendarClock, TimerReset, Video, MessageSquare, Star, X } from 'lucide-react';
 import ChatWindow from '../components/ChatWindow';
 import SwapCard from '../components/SwapCard';
 import { useSwap } from '../hooks/useSwap';
 import { useChat } from '../hooks/useChat';
 import { formatDateTime } from '../utils/formatters';
+import { reviewAPI } from '../services/api.service';
 
 const swapSteps = ['PENDING', 'ACCEPTED', 'ACTIVE', 'COMPLETED'];
 
 const SwapDetail = () => {
   const { swapId } = useParams();
+  const navigate = useNavigate();
   const { swap, isLoading, acceptSwap, cancelSwap, confirmComplete, scheduleSession } = useSwap(swapId);
   const { messages, sendMessage, sendTyping, isTyping } = useChat(swapId);
+
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+
+  const handleSubmitReview = async () => {
+    if (reviewRating === 0) return toast.error('Please select a rating from 1 to 5 stars.');
+    if (reviewComment.length < 20 || reviewComment.length > 500) return toast.error(`Comment must be between 20 and 500 characters. Currently: ${reviewComment.length}`);
+
+    setIsSubmittingReview(true);
+    try {
+      await reviewAPI.submitReview(swapId, { rating: reviewRating, comment: reviewComment });
+      toast.success('Review submitted successfully!');
+      setIsReviewModalOpen(false);
+      navigate('/dashboard');
+    } catch (err) {
+      toast.error(err?.message || 'Failed to submit review');
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
 
   // Derive current step index
   const currentStepIdx = useMemo(() => {
@@ -180,7 +204,7 @@ const SwapDetail = () => {
                   </>
                 )}
                 {swap.status === 'COMPLETED' && (
-                  <button className="w-full flex items-center justify-center gap-2 rounded-full border border-amber-400/30 bg-amber-500/10 py-3 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/20">
+                  <button onClick={() => setIsReviewModalOpen(true)} className="w-full flex items-center justify-center gap-2 rounded-full border border-amber-400/30 bg-amber-500/10 py-3 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/20">
                     <MessageSquare className="h-4 w-4" /> Leave Review
                   </button>
                 )}
@@ -201,6 +225,46 @@ const SwapDetail = () => {
         isTyping={isTyping}
         active={swap.status !== 'CANCELLED'}
       />
+
+      {isReviewModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-slate-900 border border-white/10 rounded-3xl p-6 shadow-2xl relative animate-in fade-in zoom-in duration-200">
+            <button onClick={() => setIsReviewModalOpen(false)} className="absolute top-4 right-4 text-white/40 hover:text-white transition">
+               <X className="h-5 w-5" />
+            </button>
+            <h2 className="text-xl font-bold text-white mb-2">Leave a Review</h2>
+            <p className="text-sm text-white/50 mb-6">How was your skill swap experience?</p>
+
+            <div className="flex justify-center gap-2 mb-6">
+              {[1, 2, 3, 4, 5].map(star => (
+                 <button key={star} onClick={() => setReviewRating(star)} className="p-1 transition-transform hover:scale-110">
+                   <Star className={`h-10 w-10 ${star <= reviewRating ? 'text-amber-400 fill-amber-400 drop-shadow-[0_0_12px_rgba(251,191,36,0.6)]' : 'text-slate-700 hover:text-slate-500'}`} />
+                 </button>
+              ))}
+            </div>
+
+            <div className="mb-6 relative">
+               <textarea 
+                 value={reviewComment}
+                 onChange={e => setReviewComment(e.target.value)}
+                 placeholder="Write your review here (min 20 characters)..."
+                 className="w-full bg-slate-950/50 border border-white/10 rounded-xl p-4 text-sm text-white resize-none h-32 outline-none focus:border-cyan-500/50"
+               />
+               <span className={`absolute bottom-3 right-3 text-xs ${reviewComment.length < 20 || reviewComment.length > 500 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                  {reviewComment.length}/500
+               </span>
+            </div>
+
+            <button 
+              onClick={handleSubmitReview}
+              disabled={isSubmittingReview}
+              className="w-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-xl py-3 text-slate-900 font-bold hover:opacity-90 transition disabled:opacity-50"
+            >
+              {isSubmittingReview ? 'Submitting...' : 'Submit Review'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
