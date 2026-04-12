@@ -28,6 +28,12 @@ router.get('/stats', matchingController.getMatchStats);
 router.get('/', matchingController.findMatches);
 
 /**
+ * GET /api/matches/:id/explain
+ * Explains the match scoring.
+ */
+router.get('/:matchId/explain', matchingController.explainMatch);
+
+/**
  * GET /api/matches/:id
  * Get details of a specific match.
  */

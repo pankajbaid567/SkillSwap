@@ -84,6 +84,22 @@ class MatchingController {
   }
 
   /**
+   * GET /api/matches/:id/explain
+   */
+  async explainMatch(req, res, next) {
+    try {
+      const strategyName = req.query.strategy || 'skill';
+      const strategy = StrategyFactory.create(strategyName);
+      const service = new MatchingService(strategy);
+      
+      const breakdown = await service.explainMatch(req.params.matchId);
+      return sendSuccess(res, 200, 'Score breakdown generated', breakdown);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * POST /api/matches/:id/accept
    */
   async acceptMatch(req, res, next) {

@@ -94,7 +94,12 @@ class MatchingService {
     const cacheKey = `${CACHE_KEY_PREFIX}:${userId}:${strategy}:${page}`;
 
     // 2. Try cache
-    const cached = await this.#cache.get(cacheKey);
+    let cached = null;
+    try {
+      cached = await this.#cache.get(cacheKey);
+    } catch (err) {
+      logger.warn('Cache error during get', { error: err.message });
+    }
     if (cached) {
       logger.info('Cache hit for matches', { userId, strategy, page });
       return {
@@ -113,6 +118,14 @@ class MatchingService {
       error.statusCode = 404;
       error.errorCode = 'USER_NOT_FOUND';
       throw error;
+    }
+
+    if (!user.skills || user.skills.length === 0) {
+      return { 
+        matches: [], 
+        pagination: { total: 0 }, 
+        meta: { message: "No skills listed. Add skills to find matches.", strategy, cached: false } 
+      };
     }
 
     // Get candidate pool (excludes existing matches, limited to 200)
@@ -182,7 +195,11 @@ class MatchingService {
     };
 
     // 4. Store in cache with TTL
-    await this.#cache.set(cacheKey, response, CACHE_TTL_SECONDS);
+    try {
+      await this.#cache.set(cacheKey, response, CACHE_TTL_SECONDS);
+    } catch (err) {
+      logger.warn('Cache error during set', { error: err.message });
+    }
 
     return response;
   }
@@ -204,6 +221,33 @@ class MatchingService {
   }
 
   /**
+   * Explain the scoring for a specific match.
+   * @param {string} matchId
+   * @returns {Promise<Object>}
+   */
+  async explainMatch(matchId) {
+    const match = await this.#matchRepository.findById(matchId);
+    if (!match) {
+      const error = new Error('Match not found');
+      error.statusCode = 404;
+      error.errorCode = 'MATCH_NOT_FOUND';
+      throw error;
+    }
+
+    const { userId1, userId2 } = match;
+    const user1 = await this.#userRepository.findWithSkillsAndAvailability(userId1);
+    const user2 = await this.#userRepository.findWithSkillsAndAvailability(userId2);
+
+    if (typeof this.#strategy.calculateScoreBreakdown !== 'function') {
+      const error = new Error(`Strategy "${this.strategyName}" does not support explaination.`);
+      error.statusCode = 501;
+      throw error;
+    }
+
+    return this.#strategy.calculateScoreBreakdown(user1, user2);
+  }
+
+  /**
    * Accept a match. Updates status and invalidates cache for both users.
    * @param {string} matchId
    * @param {string} userId - The user accepting the match
@@ -220,7 +264,19 @@ class MatchingService {
     await this._invalidateUserCache(match.userId1);
     await this._invalidateUserCache(match.userId2);
 
-    // TODO: Phase 2 — Trigger SwapService.createSwap(match)
+    // Trigger SwapService.createSwap
+    try {
+      const SwapService = require('./swap.service');
+      const swapService = new SwapService();
+      
+      // Pass minimal DTO to create a default pending swap
+      await swapService.createSwap(matchId, userId, {
+        proposedTime: new Date().toISOString(),
+        message: 'Match accepted. Let\'s swap skills!'
+      });
+    } catch (err) {
+      logger.error('Failed to create swap for accepted match', { matchId, error: err.message });
+    }
 
     return updated;
   }

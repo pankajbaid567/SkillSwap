@@ -24,6 +24,9 @@ class RedisClient {
   /** @type {Map<string, { value: string, expireAt: number | null }>} */
   #memoryStore = new Map();
 
+  #hits = 0;
+  #misses = 0;
+
   constructor() {
     const redisUrl = process.env.REDIS_URL;
 
@@ -71,15 +74,18 @@ class RedisClient {
       if (this.#usingRedis) {
         const raw = await this.#client.get(key);
         if (raw === null) {
+          this.#misses++;
           logger.debug('Cache miss', { key, backend: 'redis' });
           return null;
         }
+        this.#hits++;
         return JSON.parse(raw);
       }
 
       // In-memory fallback
       const entry = this.#memoryStore.get(key);
       if (!entry) {
+        this.#misses++;
         logger.debug('Cache miss', { key, backend: 'memory' });
         return null;
       }
@@ -87,15 +93,25 @@ class RedisClient {
       // Check TTL expiration
       if (entry.expireAt !== null && Date.now() > entry.expireAt) {
         this.#memoryStore.delete(key);
+        this.#misses++;
         logger.debug('Cache miss (expired)', { key, backend: 'memory' });
         return null;
       }
 
+      this.#hits++;
       return JSON.parse(entry.value);
     } catch (err) {
       logger.error('Cache GET error', { key, error: err.message });
       return null;
     }
+  }
+
+  getCacheStats() {
+    return {
+      hits: this.#hits,
+      misses: this.#misses,
+      hitRate: this.#hits + this.#misses > 0 ? this.#hits / (this.#hits + this.#misses) : 0
+    };
   }
 
   /**
