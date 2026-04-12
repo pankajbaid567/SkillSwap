@@ -2,6 +2,16 @@ const userService = require('../services/user.service');
 const { sendSuccess } = require('../utils/response.util');
 
 class UserController {
+  constructor() {
+    const methods = Object.getOwnPropertyNames(UserController.prototype)
+      .filter(m => m !== 'constructor');
+    for (const m of methods) {
+      if (typeof this[m] === 'function') {
+        this[m] = this[m].bind(this);
+      }
+    }
+  }
+
   async getOwnProfile(req, res, next) {
     try {
       const data = await userService.getProfile(req.user.id);

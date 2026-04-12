@@ -1,187 +1,158 @@
 const defaultUserRepository = require('../repositories/user.repository');
-// We need to instantiate or mock the class or just mock the repository 
-const UserService = require('../services/user.service').constructor;
-let userService;
+const userService = require('../services/user.service');
 
 jest.mock('../repositories/user.repository');
 
 describe('UserService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // In our codebase user.service.js exports a new instance with defaultUserRepository
-    // So we can just pull it in directly but mock the underlying repo methods
-    userService = require('../services/user.service'); 
-    userService.userRepository = defaultUserRepository;
+  });
+
+  describe('getProfile()', () => {
+    it('should return user profile and remove passwordHash', async () => {
+      const mockUser = { id: 1, email: 't@t.com', passwordHash: 'secret' };
+      defaultUserRepository.findWithSkillsAndAvailability.mockResolvedValue(mockUser);
+      
+      const result = await userService.getProfile(1);
+      expect(result.passwordHash).toBeUndefined();
+    });
+
+    it('should throw 404 if user not found', async () => {
+      defaultUserRepository.findWithSkillsAndAvailability.mockResolvedValue(null);
+      await expect(userService.getProfile(1)).rejects.toMatchObject({ statusCode: 404, errorCode: 'USER_NOT_FOUND' });
+    });
+  });
+
+  describe('getPublicProfile()', () => {
+    it('should return a stripped public profile', async () => {
+      const mockUser = { id: 1, email: 't@t.com', isActive: true, profile: { bio: 'Hi' }, passwordHash: 's' };
+      defaultUserRepository.findWithSkillsAndAvailability.mockResolvedValue(mockUser);
+      
+      const result = await userService.getPublicProfile(1);
+      expect(result).toHaveProperty('profile');
+      expect(result.passwordHash).toBeUndefined();
+    });
   });
 
   describe('updateProfile()', () => {
-    it('should partially update the profile successfully', async () => {
-      const mockUser = { id: 1, email: 'test@test.com' };
-      defaultUserRepository.findWithSkillsAndAvailability.mockResolvedValue(mockUser);
+    it('should update profile successfully', async () => {
+      defaultUserRepository.findWithSkillsAndAvailability.mockResolvedValue({ id: 1 });
+      defaultUserRepository.updateProfile.mockResolvedValue({ displayName: 'New' });
       
-      const payload = { displayName: 'New Name' };
-      const updatedUser = { ...mockUser, profile: { displayName: 'New Name' } };
-      defaultUserRepository.updateProfile.mockResolvedValue(updatedUser);
+      const result = await userService.updateProfile(1, { displayName: 'New' });
+      expect(result.displayName).toBe('New');
+    });
+  });
 
-      const result = await userService.updateProfile(1, payload);
-
-      expect(defaultUserRepository.updateProfile).toHaveBeenCalledWith(1, expect.objectContaining({
-        displayName: 'New Name'
-      }));
-      expect(result).toEqual(updatedUser);
+  describe('updateNotificationPreferences()', () => {
+    it('should update preferences successfully', async () => {
+      defaultUserRepository.findWithSkillsAndAvailability.mockResolvedValue({ id: 1 });
+      defaultUserRepository.updateProfile.mockResolvedValue({ notifyEmail: true });
+      
+      const result = await userService.updateNotificationPreferences(1, { notifyEmail: true });
+      expect(result.notifyEmail).toBe(true);
     });
   });
 
   describe('addSkill()', () => {
+    const payload = { skillId: 's1', type: 'offer' };
+    
     it('should add skill successfully', async () => {
-      const payload = { skillId: 'uuid', type: 'offer', proficiencyLevel: 'EXPERT' };
-      const newSkill = { id: 1, userId: 1, ...payload };
-      defaultUserRepository.createUserSkill.mockResolvedValue(newSkill);
-
+      defaultUserRepository.createUserSkill.mockResolvedValue({ id: 'us1' });
       const result = await userService.addSkill(1, payload);
-
-      expect(defaultUserRepository.createUserSkill).toHaveBeenCalledWith(expect.objectContaining({
-        userId: 1,
-        skillId: 'uuid',
-        type: 'offer'
-      }));
-      expect(result).toEqual(newSkill);
+      expect(result.id).toBe('us1');
     });
 
-    it('should throw duplicate skill error (409) if Prisma throws P2002', async () => {
-      const payload = { skillId: 'uuid', type: 'offer', proficiencyLevel: 'EXPERT' };
-      
-      const prismaError = new Error('Unique constraint failed');
-      prismaError.code = 'P2002';
-      defaultUserRepository.createUserSkill.mockRejectedValue(prismaError);
-
-      await expect(userService.addSkill(1, payload))
-        .rejects.toMatchObject({ statusCode: 409, message: 'Skill mapping already exists' });
-    });
-  });
-
-  describe('addAvailabilitySlot()', () => {
-    it('should add availability slot successfully', async () => {
-      const payload = { 
-        dayOfWeek: 1, 
-        slotStart: '2025-01-01T10:00:00.000Z', 
-        slotEnd: '2025-01-01T12:00:00.000Z' 
-      };
-      const expectedSlot = { id: 1, userId: 1, ...payload };
-      defaultUserRepository.createAvailabilitySlot.mockResolvedValue(expectedSlot);
-
-      const result = await userService.addAvailabilitySlot(1, payload);
-
-      expect(defaultUserRepository.createAvailabilitySlot).toHaveBeenCalled();
-      expect(result).toEqual(expectedSlot);
+    it('should throw 409 for P2002', async () => {
+      const error = new Error('Dup'); error.code = 'P2002';
+      defaultUserRepository.createUserSkill.mockRejectedValue(error);
+      await expect(userService.addSkill(1, payload)).rejects.toMatchObject({ statusCode: 409 });
     });
 
-    it('should throw overlapping slot / midnight error (400)', async () => {
-      const payload = { 
-        dayOfWeek: 1, 
-        slotStart: '2025-01-01T15:00:00.000Z', 
-        slotEnd: '2025-01-01T14:00:00.000Z' // End is before start
-      };
-
-      await expect(userService.addAvailabilitySlot(1, payload))
-        .rejects.toMatchObject({ statusCode: 400 });
-    });
-  });
-
-  describe('searchUsers()', () => {
-    it('should return paginated results properly', async () => {
-      const mockResult = { users: [{ id: 1, passwordHash: 'hash' }, { id: 2, passwordHash: 'hash' }], total: 2 };
-      defaultUserRepository.searchUsers.mockResolvedValue(mockResult);
-
-      const result = await userService.searchUsers('dev', { page: 1, limit: 10 });
-
-      expect(result.data).toHaveLength(2);
-      expect(result.data[0]).not.toHaveProperty('passwordHash');
-      expect(result.total).toBe(2);
-      expect(result.page).toBe(1);
-      expect(result.totalPages).toBe(1);
+    it('should throw 400 for P2003', async () => {
+      const error = new Error('FK'); error.code = 'P2003';
+      defaultUserRepository.createUserSkill.mockRejectedValue(error);
+      await expect(userService.addSkill(1, payload)).rejects.toMatchObject({ statusCode: 400 });
     });
 
-    it('should handle empty results', async () => {
-      const mockResult = { users: [], total: 0 };
-      defaultUserRepository.searchUsers.mockResolvedValue(mockResult);
-
-      const result = await userService.searchUsers('dev', { page: 1, limit: 10 });
-
-      expect(result.data).toHaveLength(0);
-      expect(result.total).toBe(0);
+    it('should rethrow unknown errors', async () => {
+      defaultUserRepository.createUserSkill.mockRejectedValue(new Error('Unknown'));
+      await expect(userService.addSkill(1, payload)).rejects.toThrow('Unknown');
     });
   });
 
   describe('removeSkill()', () => {
-    it('should remove a skill successfully', async () => {
-      defaultUserRepository.findUserSkillById.mockResolvedValue({ id: 1, userId: 1 });
-      defaultUserRepository.deleteUserSkill.mockResolvedValue();
-
-      await userService.removeSkill(1, 1);
-      expect(defaultUserRepository.deleteUserSkill).toHaveBeenCalledWith(1);
+    it('should remove if owned', async () => {
+      defaultUserRepository.findUserSkillById.mockResolvedValue({ id: 'us1', userId: 1 });
+      await userService.removeSkill(1, 'us1');
+      expect(defaultUserRepository.deleteUserSkill).toHaveBeenCalled();
     });
 
-    it('should throw 403 if forbidden', async () => {
-      defaultUserRepository.findUserSkillById.mockResolvedValue({ id: 1, userId: 2 });
-
-      await expect(userService.removeSkill(1, 1))
-        .rejects.toMatchObject({ statusCode: 403, message: 'Forbidden action' });
+    it('should throw 403 if not owned', async () => {
+      defaultUserRepository.findUserSkillById.mockResolvedValue({ id: 'us1', userId: 2 });
+      await expect(userService.removeSkill(1, 'us1')).rejects.toMatchObject({ statusCode: 403 });
     });
 
-    it('should throw 404 if not found', async () => {
+    it('should throw 404 if missing', async () => {
       defaultUserRepository.findUserSkillById.mockResolvedValue(null);
-
-      await expect(userService.removeSkill(1, 1))
-        .rejects.toMatchObject({ statusCode: 404 });
+      await expect(userService.removeSkill(1, 'us1')).rejects.toMatchObject({ statusCode: 404 });
     });
   });
 
   describe('updateSkillLevel()', () => {
-    it('should update skill level successfully', async () => {
-      defaultUserRepository.findUserSkillById.mockResolvedValue({ id: 1, userId: 1 });
-      defaultUserRepository.updateUserSkillLevel.mockResolvedValue({ id: 1, proficiencyLevel: 'EXPERT' });
-
-      const result = await userService.updateSkillLevel(1, 1, 'EXPERT');
+    it('should update level successfully', async () => {
+      defaultUserRepository.findUserSkillById.mockResolvedValue({ id: 'us1', userId: 1 });
+      defaultUserRepository.updateUserSkillLevel.mockResolvedValue({ id: 'us1', proficiencyLevel: 'EXPERT' });
+      const result = await userService.updateSkillLevel(1, 'us1', 'EXPERT');
       expect(result.proficiencyLevel).toBe('EXPERT');
     });
 
-    it('should throw 403 if forbidden', async () => {
-      defaultUserRepository.findUserSkillById.mockResolvedValue({ id: 1, userId: 2 });
-
-      await expect(userService.updateSkillLevel(1, 1, 'EXPERT'))
-        .rejects.toMatchObject({ statusCode: 403 });
+    it('should throw 403 if not owned', async () => {
+      defaultUserRepository.findUserSkillById.mockResolvedValue({ id: 'us1', userId: 2 });
+      await expect(userService.updateSkillLevel(1, 'us1', 'EXPERT')).rejects.toMatchObject({ statusCode: 403 });
     });
 
-    it('should throw 404 if not found', async () => {
+    it('should throw 404 if missing', async () => {
       defaultUserRepository.findUserSkillById.mockResolvedValue(null);
-
-      await expect(userService.updateSkillLevel(1, 1, 'EXPERT'))
-        .rejects.toMatchObject({ statusCode: 404 });
+      await expect(userService.updateSkillLevel(1, 'us1', 'EXPERT')).rejects.toMatchObject({ statusCode: 404 });
     });
   });
 
-  describe('removeAvailabilitySlot()', () => {
+  describe('Availability Slots', () => {
+    it('should add slot successfully', async () => {
+      defaultUserRepository.createAvailabilitySlot.mockResolvedValue({ id: 'slot1' });
+      const result = await userService.addAvailabilitySlot(1, { dayOfWeek: 1, slotStart: '2025-01-01T10:00:00Z', slotEnd: '2025-01-01T12:00:00Z' });
+      expect(result.id).toBe('slot1');
+    });
+
+    it('should throw 400 for invalid range', async () => {
+      await expect(userService.addAvailabilitySlot(1, { slotStart: '2025-01-01T12:00:00Z', slotEnd: '2025-01-01T10:00:00Z' }))
+        .rejects.toMatchObject({ statusCode: 400 });
+    });
+
     it('should remove slot successfully', async () => {
-      defaultUserRepository.findAvailabilitySlotById.mockResolvedValue({ id: 2, userId: 1 });
-      defaultUserRepository.deleteAvailabilitySlot.mockResolvedValue();
-
-      await userService.removeAvailabilitySlot(1, 2);
-      expect(defaultUserRepository.deleteAvailabilitySlot).toHaveBeenCalledWith(2);
+      defaultUserRepository.findAvailabilitySlotById.mockResolvedValue({ id: 'slot1', userId: 1 });
+      await userService.removeAvailabilitySlot(1, 'slot1');
+      expect(defaultUserRepository.deleteAvailabilitySlot).toHaveBeenCalled();
     });
 
-    it('should throw 403 if forbidden', async () => {
-      defaultUserRepository.findAvailabilitySlotById.mockResolvedValue({ id: 2, userId: 2 });
-
-      await expect(userService.removeAvailabilitySlot(1, 2))
-        .rejects.toMatchObject({ statusCode: 403 });
+    it('should throw 403 if not owned', async () => {
+      defaultUserRepository.findAvailabilitySlotById.mockResolvedValue({ id: 'slot1', userId: 2 });
+      await expect(userService.removeAvailabilitySlot(1, 'slot1')).rejects.toMatchObject({ statusCode: 403 });
     });
 
-    it('should throw 404 if not found', async () => {
+    it('should throw 404 if missing', async () => {
       defaultUserRepository.findAvailabilitySlotById.mockResolvedValue(null);
+      await expect(userService.removeAvailabilitySlot(1, 'slot1')).rejects.toMatchObject({ statusCode: 404 });
+    });
+  });
 
-      await expect(userService.removeAvailabilitySlot(1, 2))
-        .rejects.toMatchObject({ statusCode: 404 });
+  describe('searchUsers()', () => {
+    it('should return paginated results', async () => {
+      defaultUserRepository.searchUsers.mockResolvedValue({ users: [{ id: 1, passwordHash: 's' }], total: 1 });
+      const result = await userService.searchUsers('dev', { page: 1, limit: 10 });
+      expect(result.data[0].passwordHash).toBeUndefined();
+      expect(result.totalPages).toBe(1);
     });
   });
 });

@@ -1,5 +1,4 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient(); // Keep simple for now
+const prisma = require('../config/db.config');
 
 class AnalyticsRepository {
   async getAverageMatchScore() {

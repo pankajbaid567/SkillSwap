@@ -6,6 +6,16 @@ const logger = require('../utils/logger');
  * ReviewController — HTTP handlers for review endpoints.
  */
 class ReviewController {
+  constructor() {
+    const methods = Object.getOwnPropertyNames(ReviewController.prototype)
+      .filter(m => m !== 'constructor');
+    for (const m of methods) {
+      if (typeof this[m] === 'function') {
+        this[m] = this[m].bind(this);
+      }
+    }
+  }
+
   /**
    * POST /api/swaps/:id/reviews
    * Submit a review for a completed swap.

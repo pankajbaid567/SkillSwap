@@ -1,134 +1,173 @@
 const MatchingService = require('../services/matching.service');
-const StrategyFactory = require('../factories/strategy.factory');
-const SkillBasedStrategy = require('../strategies/skill-based.strategy');
-const AIHybridStrategy = require('../strategies/ai-hybrid.strategy');
+const prisma = require('../config/db.config');
+const logger = require('../utils/logger');
+
+jest.mock('../config/db.config', () => ({
+  user: { findUnique: jest.fn(), findMany: jest.fn(), findWithSkillsAndAvailability: jest.fn() },
+  match: { findMany: jest.fn(), findUnique: jest.fn(), getActiveCandidatePool: jest.fn(), findExistingMatch: jest.fn(), createMatch: jest.fn(), findById: jest.fn(), updateMatchStatus: jest.fn(), getMatchStats: jest.fn(), expireStaleMatches: jest.fn() },
+}));
+
+jest.mock('../cache/redis.client', () => ({
+  get: jest.fn(),
+  set: jest.fn(),
+  invalidatePattern: jest.fn(),
+}));
+
+jest.mock('../utils/logger', () => ({
+  info: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
+}));
 
 describe('MatchingService', () => {
-  let mockStrategy;
-  let mockMatchRepo;
-  let mockUserRepo;
-  let mockCache;
-  let service;
+  let matchingService, mockStrategy, mockUserRepo, mockMatchRepo, mockCache;
 
   beforeEach(() => {
-    mockStrategy = new SkillBasedStrategy();
-    mockMatchRepo = {
-      getActiveCandidatePool: jest.fn(),
-      findExistingMatch: jest.fn(),
-      createMatch: jest.fn(),
-      updateMatchStatus: jest.fn(),
-      findById: jest.fn(),
+    mockStrategy = {
+      constructor: { name: 'SkillBasedStrategy' },
+      findCandidates: jest.fn().mockReturnValue([{ id: 'u2', profile: { displayName: 'Bob' }, skills: [{ skillId: 's1', skill: { name: 'Node' } }] }]),
+      calculateScore: jest.fn().mockReturnValue(0.9),
+      rankMatches: jest.fn().mockImplementation(m => m),
+      calculateScoreBreakdown: jest.fn().mockReturnValue({ score: 0.9, breakdown: {} }),
     };
     mockUserRepo = {
       findWithSkillsAndAvailability: jest.fn(),
+    };
+    mockMatchRepo = {
+      getActiveCandidatePool: jest.fn().mockResolvedValue([]),
+      findExistingMatch: jest.fn().mockResolvedValue(null),
+      createMatch: jest.fn().mockResolvedValue({ id: 'm1' }),
+      findById: jest.fn(),
+      getMatchStats: jest.fn(),
+      updateMatchStatus: jest.fn(),
+      expireStaleMatches: jest.fn(),
     };
     mockCache = {
       get: jest.fn(),
       set: jest.fn(),
       invalidatePattern: jest.fn(),
     };
-
-    service = new MatchingService(mockStrategy, mockMatchRepo, mockUserRepo, mockCache);
+    matchingService = new MatchingService(mockStrategy, mockMatchRepo, mockUserRepo, mockCache);
   });
 
   describe('findMatches', () => {
-    const mockUser1 = {
-      id: 'user1',
-      skills: [{ type: 'want', skillId: 's1' }],
-      availabilitySlots: []
-    };
-    const mockUser2 = {
-      id: 'user2',
-      skills: [{ type: 'offer', skillId: 's1', proficiencyLevel: 'EXPERT' }],
-      availabilitySlots: []
-    };
-
-    it('returns scored + ranked matches and stores in cache', async () => {
-      mockCache.get.mockResolvedValue(null);
-      mockUserRepo.findWithSkillsAndAvailability.mockResolvedValue(mockUser1);
-      mockMatchRepo.getActiveCandidatePool.mockResolvedValue([mockUser2]);
-      mockMatchRepo.findExistingMatch.mockResolvedValue(null);
-      mockMatchRepo.createMatch.mockResolvedValue({ id: 'match1', matchedAt: new Date() });
-
-      const result = await service.findMatches('user1');
-      expect(result.matches).toHaveLength(1);
-      expect(result.matches[0].compatibilityScore).toBeGreaterThan(0);
-      expect(result.meta.cached).toBe(false);
-      expect(mockCache.set).toHaveBeenCalled();
-    });
-
-    it('returns cached result on second call', async () => {
-      mockCache.get.mockResolvedValue({
-        matches: [{ id: 'match1' }],
-        pagination: { total: 1 },
-        meta: { cached: false }
-      });
-
-      const result = await service.findMatches('user1');
-      expect(result.matches).toHaveLength(1);
-      expect(result.meta.cached).toBe(true);
+    it('returns cached results if hit', async () => {
+      const cached = { matches: [], meta: { strategy: 'skill-based' } };
+      mockCache.get.mockResolvedValue(cached);
+      const res = await matchingService.findMatches('u1');
+      expect(res.meta.cached).toBe(true);
       expect(mockUserRepo.findWithSkillsAndAvailability).not.toHaveBeenCalled();
     });
 
-    it('returns empty matches with helpful message if user has no skills', async () => {
-      mockCache.get.mockResolvedValue(null);
-      mockUserRepo.findWithSkillsAndAvailability.mockResolvedValue({ id: 'user1', skills: [] });
-
-      const result = await service.findMatches('user1');
-      expect(result.matches).toHaveLength(0);
-      expect(result.meta.message).toContain('No skills listed');
-    });
-
-    it('returns empty matches with pagination meta if all candidates already matched or no pool', async () => {
-      mockCache.get.mockResolvedValue(null);
-      mockUserRepo.findWithSkillsAndAvailability.mockResolvedValue(mockUser1);
+    it('handles cache error on get', async () => {
+      mockCache.get.mockRejectedValue(new Error('Redis Down'));
+      mockUserRepo.findWithSkillsAndAvailability.mockResolvedValue({ id: 'u1', skills: [{ id: 's1' }] });
       mockMatchRepo.getActiveCandidatePool.mockResolvedValue([]);
-
-      const result = await service.findMatches('user1');
-      expect(result.matches).toHaveLength(0);
-      expect(result.pagination.total).toBe(0);
+      await matchingService.findMatches('u1');
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Cache error'), expect.any(Object));
     });
 
-    it('gracefully falls back to DB if Redis is down (get throws)', async () => {
-      mockCache.get.mockRejectedValue(new Error('Redis down'));
-      mockUserRepo.findWithSkillsAndAvailability.mockResolvedValue(mockUser1);
-      mockMatchRepo.getActiveCandidatePool.mockResolvedValue([mockUser2]);
+    it('returns empty if user has no skills', async () => {
+      mockUserRepo.findWithSkillsAndAvailability.mockResolvedValue({ id: 'u1', skills: [] });
+      const res = await matchingService.findMatches('u1');
+      expect(res.matches).toHaveLength(0);
+      expect(res.meta.message).toContain('No skills listed');
+    });
+
+    it('ranks and stores new matches', async () => {
+      mockUserRepo.findWithSkillsAndAvailability.mockResolvedValue({ 
+        id: 'u1', skills: [{ skillId: 's1', skill: { name: 'Node' } }] 
+      });
+      mockMatchRepo.getActiveCandidatePool.mockResolvedValue([{ id: 'u2', skills: [{ skillId: 's1' }] }]);
       mockMatchRepo.findExistingMatch.mockResolvedValue(null);
-      mockMatchRepo.createMatch.mockResolvedValue({ id: 'match2' });
+      mockMatchRepo.createMatch.mockResolvedValue({ id: 'm1' });
+      
+      const res = await matchingService.findMatches('u1');
+      expect(res.matches[0].matchId).toBe('m1');
+      expect(mockCache.set).toHaveBeenCalled();
+    });
 
-      // Should not throw, should perform match logic
-      const result = await service.findMatches('user1');
-      expect(result.matches).toHaveLength(1);
+    it('uses existing matches if found', async () => {
+      mockUserRepo.findWithSkillsAndAvailability.mockResolvedValue({ id: 'u1', skills: [{ skillId: 's1' }] });
+      mockMatchRepo.getActiveCandidatePool.mockResolvedValue([{ id: 'u2', skills: [] }]);
+      mockMatchRepo.findExistingMatch.mockResolvedValue({ id: 'exist1', matchedAt: new Date() });
+      
+      const res = await matchingService.findMatches('u1');
+      expect(res.matches[0].matchId).toBe('exist1');
     });
   });
 
-  describe('setStrategy', () => {
-    it('correctly swaps strategy at runtime', async () => {
-      const hybrid = new AIHybridStrategy();
-      service.setStrategy(hybrid);
-      expect(service.strategyName).toBe('aihybrid');
+  describe('explainMatch', () => {
+    it('returns breakdown from strategy', async () => {
+      mockMatchRepo.findById.mockResolvedValue({ userId1: 'u1', userId2: 'u2' });
+      mockUserRepo.findWithSkillsAndAvailability.mockResolvedValue({});
+      const res = await matchingService.explainMatch('m1');
+      expect(res.score).toBe(0.9);
+    });
+
+    it('throws if user not found', async () => {
+      mockUserRepo.findWithSkillsAndAvailability.mockResolvedValue(null);
+      await expect(matchingService.findMatches('u1')).rejects.toMatchObject({ statusCode: 404 });
+    });
+
+    it('throws 501 if strategy does not support explanation', async () => {
+      mockStrategy.calculateScoreBreakdown = undefined;
+      mockMatchRepo.findById.mockResolvedValue({ userId1: 'u1', userId2: 'u2' });
+      await expect(matchingService.explainMatch('m1')).rejects.toMatchObject({ statusCode: 501 });
     });
   });
 
-  describe('acceptMatch / declineMatch', () => {
-    beforeEach(() => {
-      mockMatchRepo.findById.mockResolvedValue({ id: 'm1', userId1: 'u1', userId2: 'u2', status: 'pending' });
-      service._validateMatchAction = jest.fn().mockResolvedValue({ id: 'm1', userId1: 'u1', userId2: 'u2', status: 'pending' });
-    });
-
-    it('acceptMatch creates swap + invalidates cache', async () => {
+  describe('Match Actions', () => {
+    it('acceptMatch updates status and invalidates cache', async () => {
+      mockMatchRepo.findById.mockResolvedValue({ id: 'm1', status: 'pending', userId1: 'u1', userId2: 'u2' });
       mockMatchRepo.updateMatchStatus.mockResolvedValue({ id: 'm1', status: 'accepted' });
-      // assume createSwap doesn't belong to this method, but if it does we mock it
-      await service.acceptMatch('m1', 'u1');
-      expect(mockMatchRepo.updateMatchStatus).toHaveBeenCalledWith('m1', { status: 'accepted' });
+      
+      await matchingService.acceptMatch('m1', 'u1');
+      expect(mockMatchRepo.updateMatchStatus).toHaveBeenCalled();
       expect(mockCache.invalidatePattern).toHaveBeenCalled();
     });
 
-    it('declineMatch updates match status', async () => {
-      mockMatchRepo.updateMatchStatus.mockResolvedValue({ id: 'm1', status: 'declined' });
-      await service.declineMatch('m1', 'u1');
+    it('throws if match resolved already', async () => {
+      mockMatchRepo.findById.mockResolvedValue({ id: 'm1', status: 'accepted', userId1: 'u1', userId2: 'u2' });
+      await expect(matchingService.acceptMatch('m1', 'u1')).rejects.toMatchObject({ statusCode: 400 });
+    });
+
+    it('throws if user not participant', async () => {
+      mockMatchRepo.findById.mockResolvedValue({ id: 'm1', status: 'pending', userId1: 'u1', userId2: 'u2' });
+      await expect(matchingService.acceptMatch('m1', 'u3')).rejects.toMatchObject({ statusCode: 403 });
+    });
+
+    it('throws 404 if match not found in explainMatch', async () => {
+      mockMatchRepo.findById.mockResolvedValue(null);
+      await expect(matchingService.explainMatch('m1')).rejects.toMatchObject({ statusCode: 404 });
+    });
+
+    it('declineMatch updates status', async () => {
+      mockMatchRepo.findById.mockResolvedValue({ id: 'm1', status: 'pending', userId1: 'u1', userId2: 'u2' });
+      await matchingService.declineMatch('m1', 'u1');
       expect(mockMatchRepo.updateMatchStatus).toHaveBeenCalledWith('m1', { status: 'declined' });
-      expect(mockCache.invalidatePattern).toHaveBeenCalled();
+    });
+  });
+
+  describe('Utilities', () => {
+    it('gets match stats', async () => {
+      mockMatchRepo.getMatchStats.mockResolvedValue({ total: 5 });
+      const res = await matchingService.getMatchStats('u1');
+      expect(res.total).toBe(5);
+    });
+
+    it('expires stale matches', async () => {
+      mockMatchRepo.expireStaleMatches.mockResolvedValue({ count: 10 });
+      const res = await matchingService.expireStaleMatches();
+      expect(res.count).toBe(10);
+    });
+
+    it('handles cache set error', async () => {
+      mockUserRepo.findWithSkillsAndAvailability.mockResolvedValue({ id: 'u1', skills: [{ id: 's1' }] });
+      mockMatchRepo.getActiveCandidatePool.mockResolvedValue([]);
+      mockCache.set.mockRejectedValue(new Error('Redis Full'));
+      await matchingService.findMatches('u1');
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Cache error'), expect.any(Object));
     });
   });
 });

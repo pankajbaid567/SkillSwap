@@ -13,6 +13,16 @@ const logger = require('../utils/logger');
  *   - Handles error mapping (SwapStateError -> 400)
  */
 class SwapController {
+  constructor() {
+    const methods = Object.getOwnPropertyNames(SwapController.prototype)
+      .filter(m => m !== 'constructor');
+    for (const m of methods) {
+      if (typeof this[m] === 'function') {
+        this[m] = this[m].bind(this);
+      }
+    }
+  }
+
   /**
    * POST /api/swaps
    * Create a new swap request from an existing match.

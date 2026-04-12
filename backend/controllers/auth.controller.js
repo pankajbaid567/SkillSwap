@@ -2,6 +2,16 @@ const authService = require('../services/auth.service');
 const { sendSuccess, sendError } = require('../utils/response.util');
 
 class AuthController {
+  constructor() {
+    const methods = Object.getOwnPropertyNames(AuthController.prototype)
+      .filter(m => m !== 'constructor');
+    for (const m of methods) {
+      if (typeof this[m] === 'function') {
+        this[m] = this[m].bind(this);
+      }
+    }
+  }
+
   async register(req, res, next) {
     try {
       const data = await authService.register(req.body);
