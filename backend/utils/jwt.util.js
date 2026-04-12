@@ -27,7 +27,17 @@ const generateRefreshToken = (payload) => {
  */
 const verifyToken = (token, isRefresh = false) => {
   const secret = isRefresh ? envConfig.JWT_REFRESH_SECRET : envConfig.JWT_SECRET;
-  return jwt.verify(token, secret);
+  try {
+    return jwt.verify(token, secret);
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      const err = new Error(error.name === 'JsonWebTokenError' && error.message === 'invalid signature' ? 'Invalid token signature' : 'Invalid or expired token');
+      err.statusCode = 401;
+      err.errorCode = 'INVALID_TOKEN';
+      throw err;
+    }
+    throw error;
+  }
 };
 
 module.exports = {

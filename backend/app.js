@@ -14,6 +14,8 @@ const chatRoutes = require('./routes/chat.routes');
 const notificationRoutes = require('./routes/notification.routes');
 const reviewController = require('./controllers/review.controller');
 const { verifyAccessToken } = require('./middlewares/auth.middleware');
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./config/swagger.config');
 
 const app = express();
 
@@ -31,6 +33,9 @@ app.use(express.urlencoded({ extended: true }));
 // Apply Rate Limiting globally or specific to auth
 // As per instructions, rateLimiter is applied. We can apply it to API routes.
 app.use('/api', rateLimiter);
+
+// Swagger Documentation Route
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Routes
 app.use('/api/auth', authRoutes);

@@ -83,6 +83,11 @@ class UserService {
       });
       return newSkill;
     } catch (e) {
+      if (e.code === 'P2002') {
+        const error = new Error('Skill mapping already exists');
+        error.statusCode = 409;
+        throw error;
+      }
       // Catch FK violation representing non-existent skill
       if (e.code === 'P2003') {
         const error = new Error('Invalid skill ID provided');
@@ -128,6 +133,16 @@ class UserService {
   }
 
   async addAvailabilitySlot(userId, slotDto) {
+    const start = new Date(slotDto.slotStart);
+    const end = new Date(slotDto.slotEnd);
+    
+    // Check if slot overlaps midnight (end time is before or same as start time)
+    if (start.getTime() >= end.getTime()) {
+      const error = new Error('Availability slot cannot span across midnight or have invalid time range');
+      error.statusCode = 400;
+      throw error;
+    }
+
     // Optionally check if slot perfectly overlaps here 
     // Basic constraint: valid times
     return await this.userRepository.createAvailabilitySlot({
