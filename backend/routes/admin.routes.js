@@ -1,15 +1,22 @@
 const { Router } = require('express');
 const reviewController = require('../controllers/review.controller');
+const analyticsController = require('../controllers/analytics.controller');
 const { verifyAccessToken } = require('../middlewares/auth.middleware');
+const { isAdmin } = require('../middlewares/admin-role.middleware');
 
 const router = Router();
 
 // All admin routes require authentication
 router.use(verifyAccessToken);
 
-// TODO: Add admin role verification middleware
-// For now, any authenticated user can access admin routes
-// In production, add: router.use(requireAdminRole);
+// Apply admin role verification middleware
+router.use(isAdmin);
+
+/**
+ * GET /api/admin/match-analytics
+ * Admin dashboard match statistics.
+ */
+router.get('/match-analytics', analyticsController.getMatchAnalytics);
 
 /**
  * POST /api/admin/reviews/:id/flag

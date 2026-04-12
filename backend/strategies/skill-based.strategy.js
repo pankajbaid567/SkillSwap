@@ -70,6 +70,100 @@ class SkillBasedStrategy extends MatchingStrategy {
   }
 
   /**
+   * Explains the calculation between user1 and user2.
+   * @param {Object} user1
+   * @param {Object} user2
+   */
+  calculateScoreBreakdown(user1, user2) {
+    const skillOverlapScore = this._calculateSkillOverlap(user1, user2);
+    const reverseScore = this._calculateSkillOverlap(user2, user1);
+    const proficiencyBonus = this._calculateProficiencyBonus(user1, user2);
+    const availabilityScore = this._calculateAvailabilityOverlap(
+      user1.availabilitySlots || [],
+      user2.availabilitySlots || []
+    );
+    const ratingWeight = this._calculateRatingWeight(user2);
+
+    const finalScore = Math.min(Math.max(
+      skillOverlapScore * 0.35 +
+      reverseScore * 0.35 +
+      proficiencyBonus * 0.10 +
+      availabilityScore * 0.10 +
+      ratingWeight * 0.10, 0), 1);
+
+    const user1WantsIds = this._getSkillIds(user1, 'want');
+    const user2OffersIds = this._getSkillIds(user2, 'offer');
+    
+    // Create lookups to names for the result
+    // Assuming user skills contain the populated skill object, or we return ID if unavailable.
+    // E.g., user1.skills = [{skill: {name: 'React'}, skillId: 'uuid', type:'want'}]
+    const getSkillName = (skills, id) => {
+      const match = skills.find(s => s.skillId === id);
+      return match && match.skill ? match.skill.name : id;
+    };
+    
+    const sharedIds = this._intersect(user1WantsIds, user2OffersIds);
+    const missingIds = new Set([...user1WantsIds].filter(x => !sharedIds.has(x)));
+    
+    const skills1 = user1.skills || [];
+    const sharedSkills = Array.from(sharedIds).map(id => getSkillName(skills1, id));
+    const missingSkills = Array.from(missingIds).map(id => getSkillName(skills1, id));
+
+    const commonSlots = this._findCommonSlots(user1.availabilitySlots || [], user2.availabilitySlots || []);
+
+    return {
+      skillOverlapScore: parseFloat(skillOverlapScore.toFixed(4)),
+      reverseScore: parseFloat(reverseScore.toFixed(4)),
+      proficiencyBonus: parseFloat(proficiencyBonus.toFixed(4)),
+      availabilityScore: parseFloat(availabilityScore.toFixed(4)),
+      ratingWeight: parseFloat(ratingWeight.toFixed(4)),
+      finalScore: parseFloat(finalScore.toFixed(4)),
+      sharedSkills,
+      missingSkills,
+      commonSlots
+    };
+  }
+
+  /**
+   * Find common slots between two users
+   */
+  _findCommonSlots(slots1, slots2) {
+    if (slots1.length === 0 || slots2.length === 0) return [];
+    
+    const common = [];
+    for (const s1 of slots1) {
+      for (const s2 of slots2) {
+        if (s1.dayOfWeek === s2.dayOfWeek) {
+          const s1Start = this._timeToMinutes(s1.slotStart);
+          const s1End = this._timeToMinutes(s1.slotEnd);
+          const s2Start = this._timeToMinutes(s2.slotStart);
+          const s2End = this._timeToMinutes(s2.slotEnd);
+
+          if (s1Start < s2End && s2Start < s1End) {
+            // Found overlap
+            const startOverlap = Math.max(s1Start, s2Start);
+            const endOverlap = Math.min(s1End, s2End);
+            
+            const formatTime = (mins) => {
+              const h = Math.floor(mins / 60);
+              const m = mins % 60;
+              const ampm = h >= 12 ? 'pm' : 'am';
+              const h12 = h % 12 || 12;
+              return `${h12}${m > 0 ? ':'+m.toString().padStart(2, '0') : ''}${ampm}`;
+            };
+            
+            common.push({
+              day: s1.dayOfWeek,
+              time: `${formatTime(startOverlap)}-${formatTime(endOverlap)}`
+            });
+          }
+        }
+      }
+    }
+    return common;
+  }
+
+  /**
    * Rank matches by score descending (best first).
    * @param {Array<{user: Object, score: number}>} matches
    * @returns {Array<{user: Object, score: number}>} Sorted matches

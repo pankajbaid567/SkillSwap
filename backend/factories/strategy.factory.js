@@ -31,13 +31,10 @@ class StrategyFactory {
     const factory = STRATEGY_REGISTRY[strategyName];
 
     if (!factory) {
+      const logger = require('../utils/logger');
       const supported = Object.keys(STRATEGY_REGISTRY).join(', ');
-      const error = new Error(
-        `Unknown strategy "${strategyName}". Supported: ${supported}`,
-      );
-      error.statusCode = 400;
-      error.errorCode = 'INVALID_STRATEGY';
-      throw error;
+      logger.warn(`Unknown strategy "${strategyName}". Supported: ${supported}. Defaulting to "skill".`);
+      return STRATEGY_REGISTRY['skill']();
     }
 
     return factory();
