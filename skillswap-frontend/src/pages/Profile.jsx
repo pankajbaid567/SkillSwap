@@ -91,7 +91,7 @@ const Profile = () => {
       await userAPI.addSkill({ 
         name: skillSearch, 
         type: type, 
-        proficiency: type === 'OFFER' ? offeredSkillProficiency : wantedSkillProficiency 
+        proficiency: type === 'offer' ? offeredSkillProficiency : wantedSkillProficiency 
       });
       toast.success('Skill added');
       queryClient.invalidateQueries(['profile']);
@@ -268,8 +268,8 @@ const Profile = () => {
                    />
                  </div>
                  <div className="flex gap-2">
-                    <button onClick={() => handleAddSkill('OFFER')} className="px-3 py-2 bg-emerald-500/20 text-emerald-300 rounded-xl text-xs font-bold border border-emerald-500/30 hover:bg-emerald-500/30 transition">Offer</button>
-                    <button onClick={() => handleAddSkill('WANT')} className="px-3 py-2 bg-indigo-500/20 text-indigo-300 rounded-xl text-xs font-bold border border-indigo-500/30 hover:bg-indigo-500/30 transition">Want</button>
+                    <button onClick={() => handleAddSkill('offer')} className="px-3 py-2 bg-emerald-500/20 text-emerald-300 rounded-xl text-xs font-bold border border-emerald-500/30 hover:bg-emerald-500/30 transition">Offer</button>
+                    <button onClick={() => handleAddSkill('want')} className="px-3 py-2 bg-indigo-500/20 text-indigo-300 rounded-xl text-xs font-bold border border-indigo-500/30 hover:bg-indigo-500/30 transition">Want</button>
                  </div>
                </div>
 
@@ -277,9 +277,9 @@ const Profile = () => {
                  <div>
                    <p className="text-xs font-semibold text-white/50 mb-3 border-b border-white/5 pb-2">Skills I Offer</p>
                    <div className="flex flex-wrap gap-2">
-                     {current.skills?.filter(s => s.type === 'OFFER').map((s) => (
+                     {current.skills?.filter(s => s.type === 'offer').map((s) => (
                        <div key={s.id || s.name} className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-3 py-1">
-                         <span className="text-sm text-emerald-100">{s.name}</span>
+                         <span className="text-sm text-emerald-100">{s.skill?.name || s.name}</span>
                          <button onClick={() => handleRemoveSkill(s.id)} className="text-emerald-500 hover:text-emerald-300"><Trash2 className="h-3 w-3" /></button>
                        </div>
                      )) || <p className="text-xs text-white/30">None added.</p>}
@@ -289,9 +289,9 @@ const Profile = () => {
                  <div>
                    <p className="text-xs font-semibold text-white/50 mb-3 border-b border-white/5 pb-2">Skills I Want</p>
                    <div className="flex flex-wrap gap-2">
-                     {current.skills?.filter(s => s.type === 'WANT').map((s) => (
+                     {current.skills?.filter(s => s.type === 'want').map((s) => (
                        <div key={s.id || s.name} className="flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 rounded-full px-3 py-1">
-                         <span className="text-sm text-indigo-100">{s.name}</span>
+                         <span className="text-sm text-indigo-100">{s.skill?.name || s.name}</span>
                          <button onClick={() => handleRemoveSkill(s.id)} className="text-indigo-500 hover:text-indigo-300"><Trash2 className="h-3 w-3" /></button>
                        </div>
                      )) || <p className="text-xs text-white/30">None added.</p>}

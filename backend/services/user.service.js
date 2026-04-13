@@ -71,12 +71,41 @@ class UserService {
   }
 
   async addSkill(userId, skillDto) {
-    // Validate if the skill actually exists in the system (or Prisma would throw an FK error)
-    // Here we let Prisma relational constraints handle it, but we could explicitly check via repo constraint
     try {
+      let skillId = skillDto.skillId;
+
+      // If no skillId provided but a name is given, find or create the skill
+      if (!skillId && skillDto.name) {
+        const skillName = skillDto.name.trim();
+
+        // Try to find an existing skill by name (case-insensitive)
+        let skill = await prisma.skill.findFirst({
+          where: { name: { equals: skillName, mode: 'insensitive' } }
+        });
+
+        if (!skill) {
+          // Get or create a default "General" category for user-created skills
+          let category = await prisma.skillCategory.findUnique({
+            where: { name: 'General' }
+          });
+
+          if (!category) {
+            category = await prisma.skillCategory.create({
+              data: { name: 'General' }
+            });
+          }
+
+          skill = await prisma.skill.create({
+            data: { name: skillName, categoryId: category.id }
+          });
+        }
+
+        skillId = skill.id;
+      }
+
       const newSkill = await this.userRepository.createUserSkill({
         userId,
-        skillId: skillDto.skillId,
+        skillId,
         type: skillDto.type,
         proficiencyLevel: skillDto.proficiencyLevel,
         description: skillDto.description
