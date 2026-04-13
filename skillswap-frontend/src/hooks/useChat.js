@@ -6,13 +6,11 @@ import { SOCKET_EVENTS } from '../constants/events';
 import { useAuth } from './useAuth';
 
 export const useChat = (swapId) => {
-  const queryClient = useQueryClient();
   const { socket, isConnected } = useSocket();
   const { user } = useAuth();
   
   const [messages, setMessages] = useState([]);
   const [isTyping, setIsTyping] = useState({}); // { [userId]: boolean }
-  const [onlineStatus, setOnlineStatus] = useState({});
 
   const messagesQuery = useQuery({
     queryKey: ['chat-messages', swapId],
@@ -28,6 +26,7 @@ export const useChat = (swapId) => {
   });
 
   // Hydrate local messages state when query completes
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if (messagesQuery.data) {
       setMessages(messagesQuery.data);
@@ -92,7 +91,6 @@ export const useChat = (swapId) => {
   return {
     messages,
     isTyping,
-    onlineStatus,
     unreadCount: unreadCountQuery.data?.count || 0,
     isLoading: messagesQuery.isLoading || unreadCountQuery.isLoading,
     error: messagesQuery.error || unreadCountQuery.error,

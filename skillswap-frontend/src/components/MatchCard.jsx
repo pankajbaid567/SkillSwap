@@ -1,6 +1,5 @@
 import { ArrowRightLeft, Info, MapPin, Sparkles, Star, UserPlus } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { formatCount, truncateText } from '../utils/formatters';
 
 const CircularProgress = ({ value, label }) => {
   const percentage = Math.min(100, Math.max(0, value));

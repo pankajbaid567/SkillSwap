@@ -39,11 +39,33 @@ const updateProfileSchema = z.object({
  * @property {'BEGINNER'|'INTERMEDIATE'|'ADVANCED'|'EXPERT'} proficiencyLevel
  * @property {string} [description]
  */
+const proficiencyMap = {
+  'beginner': 'BEGINNER',
+  'intermediate': 'INTERMEDIATE',
+  'advanced': 'ADVANCED',
+  'expert': 'EXPERT',
+};
+
 const addSkillSchema = z.object({
-  skillId: z.string().uuid(),
-  type: z.enum(['offer', 'want']),
-  proficiencyLevel: z.enum(['BEGINNER', 'INTERMEDIATE', 'ADVANCED', 'EXPERT']),
+  skillId: z.string().uuid().optional(),
+  name: z.string().min(1).optional(),
+  type: z.enum(['offer', 'want', 'OFFER', 'WANT']).transform(v => v.toLowerCase()),
+  proficiencyLevel: z.enum(['BEGINNER', 'INTERMEDIATE', 'ADVANCED', 'EXPERT']).optional(),
+  proficiency: z.string().optional(),
   description: z.string().optional()
+}).transform(data => {
+  // Normalize proficiency: accept "proficiency" alias with any casing
+  if (!data.proficiencyLevel && data.proficiency) {
+    const normalized = data.proficiency.toLowerCase();
+    data.proficiencyLevel = proficiencyMap[normalized] || 'INTERMEDIATE';
+  }
+  if (!data.proficiencyLevel) {
+    data.proficiencyLevel = 'INTERMEDIATE';
+  }
+  delete data.proficiency;
+  return data;
+}).refine(data => data.skillId || data.name, {
+  message: 'Either skillId or name must be provided'
 });
 
 /**
