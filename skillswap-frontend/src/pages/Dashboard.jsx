@@ -1,10 +1,8 @@
-import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Bell, Calendar, Globe2, Sparkles, Star, Users, Video, Workflow } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useMatches } from '../hooks/useMatches';
 import { useSwap } from '../hooks/useSwap';
-import { useNotifications } from '../hooks/useNotifications';
 import MatchCard from '../components/MatchCard';
 import SwapCard from '../components/SwapCard';
 import { ROUTES } from '../constants/routes';

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { chatAPI } from '../services/api.service';
 import { useSocket } from '../contexts/SocketContext';
 import { SOCKET_EVENTS } from '../constants/events';
@@ -26,9 +26,9 @@ export const useChat = (swapId) => {
   });
 
   // Hydrate local messages state when query completes
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if (messagesQuery.data) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMessages(messagesQuery.data);
     }
   }, [messagesQuery.data]);
