@@ -58,10 +58,10 @@ const MatchCard = ({ match, onAccept, onDecline, onExplain, compact = false }) =
                 <MapPin className="h-3.5 w-3.5 text-cyan-300" />
                 {location}
               </span>
-              {rating !== undefined && (
+              {rating != null && (
                 <span className="flex items-center gap-1 text-amber-300/80">
                   <Star className="h-3.5 w-3.5 fill-amber-300/80" />
-                  {rating.toFixed(1)}
+                  {Number(rating).toFixed(1)}
                 </span>
               )}
             </div>
