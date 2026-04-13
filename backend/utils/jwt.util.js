@@ -10,13 +10,16 @@ const generateAccessToken = (payload) => {
   return jwt.sign(payload, envConfig.JWT_SECRET, { expiresIn: '15m' });
 };
 
+const crypto = require('crypto');
+
 /**
  * Generates a refresh token
  * @param {Object} payload - Data to encode in the token
  * @returns {string} - The JWT refresh token
  */
 const generateRefreshToken = (payload) => {
-  return jwt.sign(payload, envConfig.JWT_REFRESH_SECRET, { expiresIn: '7d' });
+  const uniquePayload = { ...payload, jti: crypto.randomUUID() };
+  return jwt.sign(uniquePayload, envConfig.JWT_REFRESH_SECRET, { expiresIn: '7d' });
 };
 
 /**

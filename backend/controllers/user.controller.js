@@ -3,6 +3,16 @@ const { sendSuccess } = require('../utils/response.util');
 const { isUserOnline } = require('../socket/chat.socket');
 
 class UserController {
+  constructor() {
+    const methods = Object.getOwnPropertyNames(UserController.prototype)
+      .filter(m => m !== 'constructor');
+    for (const m of methods) {
+      if (typeof this[m] === 'function') {
+        this[m] = this[m].bind(this);
+      }
+    }
+  }
+
   async getOwnProfile(req, res, next) {
     try {
       const data = await userService.getProfile(req.user.id);
@@ -106,8 +116,8 @@ class UserController {
   async getOnlineStatus(req, res, next) {
     try {
       const { id } = req.params;
-      const isOnline = await isUserOnline(id);
-      return sendSuccess(res, 200, 'Online status retrieved', { isOnline });
+      const { isOnline, presenceAvailable } = await isUserOnline(id);
+      return sendSuccess(res, 200, 'Online status retrieved', { isOnline, presenceAvailable });
     } catch (error) {
       next(error);
     }

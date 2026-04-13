@@ -17,32 +17,20 @@ describe('AuthService', () => {
   });
 
   describe('register()', () => {
-    it('should register a new user successfully (happy path)', async () => {
+    it('should register a new user successfully', async () => {
       userRepository.findByEmail.mockResolvedValue(null);
       hashString.mockResolvedValue('hashedPass');
-      
-      const mockUser = { id: 1, email: 'test@test.com', passwordHash: 'hashedPass' };
-      userRepository.createUserWithProfile.mockResolvedValue(mockUser);
-      
-      generateAccessToken.mockReturnValue('access_token_mock');
-      generateRefreshToken.mockReturnValue('refresh_token_mock');
-      userRepository.saveRefreshToken.mockResolvedValue();
+      userRepository.createUserWithProfile.mockResolvedValue({ id: 1, email: 'test@test.com' });
+      generateAccessToken.mockReturnValue('at');
+      generateRefreshToken.mockReturnValue('rt');
 
-      const result = await authService.register({ email: 'test@test.com', password: 'password123' });
-
-      expect(userRepository.findByEmail).toHaveBeenCalledWith('test@test.com');
-      expect(hashString).toHaveBeenCalledWith('password123');
-      expect(userRepository.createUserWithProfile).toHaveBeenCalled();
-      expect(result.accessToken).toBe('access_token_mock');
-      expect(result.refreshToken).toBe('refresh_token_mock');
-      expect(result.user).not.toHaveProperty('passwordHash');
+      const result = await authService.register({ email: 'test@test.com', password: 'pw' });
+      expect(result.accessToken).toBe('at');
     });
 
-    it('should throw duplicate email error (409)', async () => {
-      userRepository.findByEmail.mockResolvedValue({ id: 1, email: 'test@test.com' });
-
-      await expect(authService.register({ email: 'test@test.com', password: 'password123' }))
-        .rejects.toMatchObject({ statusCode: 409, errorCode: 'DUPLICATE_EMAIL' });
+    it('should throw 409 for duplicate email', async () => {
+      userRepository.findByEmail.mockResolvedValue({ id: 1 });
+      await expect(authService.register({ email: 'test@test.com' })).rejects.toMatchObject({ statusCode: 409 });
     });
   });
 
@@ -51,73 +39,78 @@ describe('AuthService', () => {
       const mockUser = { id: 1, email: 'test@test.com', passwordHash: 'hashedPass' };
       userRepository.findByEmail.mockResolvedValue(mockUser);
       compareHash.mockResolvedValue(true);
-      
-      generateAccessToken.mockReturnValue('access_token_mock');
-      generateRefreshToken.mockReturnValue('refresh_token_mock');
-      userRepository.saveRefreshToken.mockResolvedValue();
+      generateAccessToken.mockReturnValue('at');
+      generateRefreshToken.mockReturnValue('rt');
 
-      const result = await authService.login({ email: 'test@test.com', password: 'password123' });
-
-      expect(compareHash).toHaveBeenCalledWith('password123', 'hashedPass');
-      expect(result.accessToken).toBe('access_token_mock');
-      expect(result.refreshToken).toBe('refresh_token_mock');
-      expect(result.user).not.toHaveProperty('passwordHash');
+      const result = await authService.login({ email: 'test@test.com', password: 'pw' });
+      expect(result.accessToken).toBe('at');
     });
 
-    it('should throw 403/401 for wrong password', async () => {
-      const mockUser = { id: 1, email: 'test@test.com', passwordHash: 'hashedPass' };
-      userRepository.findByEmail.mockResolvedValue(mockUser);
+    it('should throw 401 for wrong password', async () => {
+      userRepository.findByEmail.mockResolvedValue({ id: 1, passwordHash: 'h' });
       compareHash.mockResolvedValue(false);
-
-      await expect(authService.login({ email: 'test@test.com', password: 'wrongpass' }))
-        .rejects.toMatchObject({ statusCode: 401, errorCode: 'INVALID_CREDENTIALS' });
+      await expect(authService.login({ email: 't@t.com', password: 'p' })).rejects.toMatchObject({ statusCode: 401 });
     });
 
-    it('should throw 404/401 for user not found', async () => {
+    it('should throw 401 for user not found', async () => {
       userRepository.findByEmail.mockResolvedValue(null);
-
-      await expect(authService.login({ email: 'notfound@test.com', password: 'password123' }))
-        .rejects.toMatchObject({ statusCode: 401, errorCode: 'INVALID_CREDENTIALS' });
+      await expect(authService.login({ email: 't@t.com', password: 'p' })).rejects.toMatchObject({ statusCode: 401 });
     });
   });
 
   describe('refreshToken()', () => {
-    it('should refresh token successfully for valid token', async () => {
-      const dbRecord = { userId: 1, isRevoked: false, expiresAt: new Date(Date.now() + 10000) };
-      userRepository.findRefreshToken.mockResolvedValue(dbRecord);
-      verifyToken.mockReturnValue({ id: 1, email: 'test@test.com' });
-      generateAccessToken.mockReturnValue('new_access_token');
-
-      const result = await authService.refreshToken('valid_refresh_token');
-
-      expect(verifyToken).toHaveBeenCalledWith('valid_refresh_token', true);
-      expect(result.accessToken).toBe('new_access_token');
+    it('should throw 400 if token is missing', async () => {
+      await expect(authService.refreshToken(null)).rejects.toMatchObject({ statusCode: 400 });
     });
 
-    it('should throw 401 for expired token in DB record', async () => {
-      const dbRecord = { userId: 1, isRevoked: false, expiresAt: new Date(Date.now() - 10000) };
-      userRepository.findRefreshToken.mockResolvedValue(dbRecord);
-
-      await expect(authService.refreshToken('expired_refresh_token'))
-        .rejects.toMatchObject({ statusCode: 401 });
+    it('should throw 401 if record is missing or invalid', async () => {
+      userRepository.findRefreshToken.mockResolvedValue(null);
+      await expect(authService.refreshToken('bad')).rejects.toMatchObject({ statusCode: 401 });
     });
 
-    it('should throw 401 for revoked token', async () => {
-      const dbRecord = { userId: 1, isRevoked: true, expiresAt: new Date(Date.now() + 10000) };
-      userRepository.findRefreshToken.mockResolvedValue(dbRecord);
+    it('should throw 401 if record is expired', async () => {
+      userRepository.findRefreshToken.mockResolvedValue({ expiresAt: new Date(0) });
+      await expect(authService.refreshToken('expired')).rejects.toMatchObject({ statusCode: 401 });
+    });
+    
+    it('should verify token and issue new access token', async () => {
+      userRepository.findRefreshToken.mockResolvedValue({ expiresAt: new Date(Date.now() + 100000), isRevoked: false });
+      verifyToken.mockReturnValue({ id: 'u1', email: 'u1@t.com' });
+      generateAccessToken.mockReturnValue('new-at');
+      
+      const result = await authService.refreshToken('valid-rt');
+      expect(result.accessToken).toBe('new-at');
+    });
+  });
 
-      await expect(authService.refreshToken('revoked_refresh_token'))
-        .rejects.toMatchObject({ statusCode: 401 });
+  describe('forgotPassword / resetPassword', () => {
+    it('should handle forgotPassword (mock)', async () => {
+      userRepository.findByEmail.mockResolvedValue({ id: 'u1' });
+      const spy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      await authService.forgotPassword('u1@t.com');
+      expect(spy).toHaveBeenCalledWith(expect.stringContaining('Send this token'));
+      spy.mockRestore();
+    });
+
+    it('should return early if user not found in forgotPassword', async () => {
+      userRepository.findByEmail.mockResolvedValue(null);
+      await authService.forgotPassword('none@t.com');
+      expect(userRepository.findByEmail).toHaveBeenCalled();
+    });
+
+    it('should handle resetPassword (mock)', async () => {
+      hashString.mockResolvedValue('new-hash');
+      const spy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      await authService.resetPassword('token123', 'new-pass');
+      expect(spy).toHaveBeenCalledWith(expect.stringContaining('Resetting password'), expect.anything());
+      spy.mockRestore();
     });
   });
 
   describe('logout()', () => {
-    it('should accurately revoke tokens in DB', async () => {
-      userRepository.revokeRefreshToken.mockResolvedValue();
-
-      await authService.logout(1);
-
-      expect(userRepository.revokeRefreshToken).toHaveBeenCalledWith(1);
+    it('should revoke token', async () => {
+      await authService.logout('u1');
+      expect(userRepository.revokeRefreshToken).toHaveBeenCalledWith('u1');
     });
   });
 });

@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: skillswap-api
+    env: node
+    rootDir: backend
+    buildCommand: npm install && npx prisma migrate deploy
+    startCommand: node server.js

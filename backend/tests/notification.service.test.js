@@ -1,170 +1,156 @@
 const NotificationService = require('../services/notification.service');
 const { SwapEvents, SwapEventEmitter } = require('../events/swap.events');
+const { SessionEvents, SessionEventEmitter } = require('../events/session.events');
+const { ReviewEvents, ReviewEventEmitter } = require('../events/review.events');
+const prisma = require('../config/db.config');
+const logger = require('../utils/logger');
+
+jest.mock('../config/db.config', () => ({
+  notification: {
+    findMany: jest.fn(),
+    count: jest.fn(),
+    updateMany: jest.fn(),
+    findUnique: jest.fn(),
+    create: jest.fn(),
+  },
+  user: {
+    findUnique: jest.fn(),
+  },
+}));
+
+jest.mock('../utils/logger', () => ({
+  info: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
+}));
 
 describe('NotificationService', () => {
   let notificationService;
-  let emitter;
+  let mockSwapEmitter;
+  let mockSessionEmitter;
+  let mockReviewEmitter;
 
-  const mockSwap = { id: 'swap-123', status: 'PENDING' };
-  const mockInitiator = {
-    id: 'user-1',
-    email: 'initiator@test.com',
-    profile: { displayName: 'Alice' },
-  };
-  const mockReceiver = {
-    id: 'user-2',
-    email: 'receiver@test.com',
-    profile: { displayName: 'Bob' },
-  };
+  const mockUser = { id: 'user-1', email: 'test@test.com', profile: { displayName: 'Alice', notifyEmail: true, notifyInApp: true } };
 
   beforeEach(() => {
-    emitter = new SwapEventEmitter();
-    notificationService = new NotificationService(emitter);
-    notificationService.registerListeners();
+    mockSwapEmitter = new SwapEventEmitter();
+    mockSessionEmitter = new SessionEventEmitter();
+    mockReviewEmitter = new ReviewEventEmitter();
+    notificationService = new NotificationService(mockSwapEmitter, mockSessionEmitter, mockReviewEmitter);
+    jest.clearAllMocks();
   });
 
-  afterEach(() => {
-    emitter.removeAllListeners();
-  });
+  describe('Database Operations', () => {
+    it('should get notifications with pagination', async () => {
+      prisma.notification.findMany.mockResolvedValue([{ id: 'n1' }]);
+      prisma.notification.count.mockResolvedValue(1);
 
-  it('should handle SWAP_CREATED and notify receiver', (done) => {
-    // Spy on handleSwapEvent
-    const spy = jest.spyOn(notificationService, 'handleSwapEvent');
+      const result = await notificationService.getNotifications('user-1', { page: 1, limit: 10 });
+      expect(result.items).toHaveLength(1);
+    });
 
-    emitter.emitSwapCreated(mockSwap, mockInitiator, mockReceiver);
+    it('should mark a notification as read', async () => {
+      prisma.notification.updateMany.mockResolvedValue({ count: 1 });
+      prisma.notification.findUnique.mockResolvedValue({ id: 'n1', isRead: true });
 
-    // handleSwapEvent is synchronous, so we can check immediately
-    setImmediate(() => {
-      expect(spy).toHaveBeenCalledWith(
-        SwapEvents.SWAP_CREATED,
-        expect.objectContaining({
-          event: SwapEvents.SWAP_CREATED,
-          swap: mockSwap,
-          notifyUserId: mockReceiver.id,
-          message: expect.stringContaining('Alice'),
-        })
-      );
-      spy.mockRestore();
-      done();
+      const result = await notificationService.markRead('n1', 'user-1');
+      expect(result.id).toBe('n1');
+    });
+
+    it('should mark all as read', async () => {
+      prisma.notification.updateMany.mockResolvedValue({ count: 5 });
+      const result = await notificationService.markAllRead('user-1');
+      expect(result.updated).toBe(5);
+    });
+
+    it('should get unread count', async () => {
+      prisma.notification.count.mockResolvedValue(3);
+      const result = await notificationService.getUnreadCount('user-1');
+      expect(result.count).toBe(3);
     });
   });
 
-  it('should handle SWAP_ACCEPTED and notify initiator', (done) => {
-    const spy = jest.spyOn(notificationService, 'handleSwapEvent');
+  describe('Observers and Channels', () => {
+    it('should notify observers if channel is enabled', async () => {
+      const mockObserver = { getChannel: () => 'inapp', update: jest.fn().mockResolvedValue() };
+      notificationService.addObserver(mockObserver);
+      prisma.user.findUnique.mockResolvedValue(mockUser);
+      
+      await notificationService.send('user-1', 'SWAP_CREATED', { actorName: 'Bob' });
+      expect(mockObserver.update).toHaveBeenCalled();
+    });
 
-    emitter.emitSwapAccepted(mockSwap, mockInitiator, mockReceiver);
+    it('should NOT notify observers if channel is disabled', async () => {
+      const mockObserver = { getChannel: () => 'email', update: jest.fn().mockResolvedValue() };
+      notificationService.addObserver(mockObserver);
+      
+      const userNoEmail = { ...mockUser, profile: { notifyEmail: false } };
+      prisma.user.findUnique.mockResolvedValue(userNoEmail);
+      
+      await notificationService.send('user-1', 'TEST');
+      expect(mockObserver.update).not.toHaveBeenCalled();
+    });
 
-    setImmediate(() => {
-      expect(spy).toHaveBeenCalledWith(
-        SwapEvents.SWAP_ACCEPTED,
-        expect.objectContaining({
-          event: SwapEvents.SWAP_ACCEPTED,
-          notifyUserId: mockInitiator.id,
-          message: expect.stringContaining('accepted'),
-        })
-      );
-      spy.mockRestore();
-      done();
+    it('should isolate observer failures', async () => {
+      const observer1 = { getChannel: () => 'inapp', update: jest.fn().mockRejectedValue(new Error('Fail')) };
+      notificationService.addObserver(observer1);
+      prisma.user.findUnique.mockResolvedValue(mockUser);
+      
+      await notificationService.send('user-1', 'TEST');
+      expect(logger.error).toHaveBeenCalled();
     });
   });
 
-  it('should handle SWAP_COMPLETED and notify both users', (done) => {
-    const spy = jest.spyOn(notificationService, 'handleSwapEvent');
-
-    emitter.emitSwapCompleted(mockSwap, mockInitiator, mockReceiver);
-
-    setImmediate(() => {
-      expect(spy).toHaveBeenCalledWith(
-        SwapEvents.SWAP_COMPLETED,
-        expect.objectContaining({
-          event: SwapEvents.SWAP_COMPLETED,
-          notifyUserIds: [mockInitiator.id, mockReceiver.id],
-          message: expect.stringContaining('review'),
-        })
-      );
-      spy.mockRestore();
-      done();
+  describe('Event Bus Adapters', () => {
+    it('should handle session events', async () => {
+      const mockObserver = { getChannel: () => 'inapp', update: jest.fn() };
+      notificationService.addObserver(mockObserver);
+      prisma.user.findUnique.mockResolvedValue(mockUser);
+      
+      notificationService.registerListeners();
+      
+      const session = { id: 's1', scheduledAt: new Date().toISOString() };
+      const initiator = { id: 'u1', profile: { displayName: 'Alice' } };
+      const receiver = { id: 'user-1', profile: { displayName: 'Bob' } };
+      
+      mockSessionEmitter.emitSessionScheduled(session, { id: 'sw1' }, initiator, receiver);
+      
+      await new Promise(resolve => setImmediate(resolve));
+      expect(mockObserver.update).toHaveBeenCalled();
     });
-  });
 
-  it('should handle SWAP_CANCELLED and notify the other party', (done) => {
-    const spy = jest.spyOn(notificationService, 'handleSwapEvent');
-
-    emitter.emitSwapCancelled(
-      mockSwap,
-      mockInitiator,
-      mockReceiver,
-      mockInitiator.id,
-      'Changed mind'
-    );
-
-    setImmediate(() => {
-      expect(spy).toHaveBeenCalledWith(
-        SwapEvents.SWAP_CANCELLED,
-        expect.objectContaining({
-          event: SwapEvents.SWAP_CANCELLED,
-          notifyUserId: mockReceiver.id,
-        })
-      );
-      spy.mockRestore();
-      done();
+    it('should handle review events', async () => {
+      const mockObserver = { getChannel: () => 'inapp', update: jest.fn() };
+      notificationService.addObserver(mockObserver);
+      prisma.user.findUnique.mockResolvedValue(mockUser);
+      
+      notificationService.registerListeners();
+      
+      const review = { id: 'r1', rating: 5, swapId: 'sw1' };
+      const reviewer = { profile: { displayName: 'Alice' } };
+      const reviewee = { id: 'user-1' };
+      
+      mockReviewEmitter.emitReviewReceived(review, reviewer, reviewee);
+      
+      await new Promise(resolve => setImmediate(resolve));
+      expect(mockObserver.update).toHaveBeenCalled();
     });
-  });
 
-  it('should handle SWAP_EXPIRED and notify both users', (done) => {
-    const spy = jest.spyOn(notificationService, 'handleSwapEvent');
-
-    emitter.emitSwapExpired(mockSwap, mockInitiator, mockReceiver);
-
-    setImmediate(() => {
-      expect(spy).toHaveBeenCalledWith(
-        SwapEvents.SWAP_EXPIRED,
-        expect.objectContaining({
-          event: SwapEvents.SWAP_EXPIRED,
-          notifyUserIds: [mockInitiator.id, mockReceiver.id],
-          message: expect.stringContaining('expired'),
-        })
-      );
-      spy.mockRestore();
-      done();
-    });
-  });
-
-  it('should handle SWAP_DECLINED and notify initiator', (done) => {
-    const spy = jest.spyOn(notificationService, 'handleSwapEvent');
-
-    emitter.emitSwapDeclined(mockSwap, mockInitiator, mockReceiver, 'Not interested');
-
-    setImmediate(() => {
-      expect(spy).toHaveBeenCalledWith(
-        SwapEvents.SWAP_DECLINED,
-        expect.objectContaining({
-          event: SwapEvents.SWAP_DECLINED,
-          notifyUserId: mockInitiator.id,
-          reason: 'Not interested',
-        })
-      );
-      spy.mockRestore();
-      done();
-    });
-  });
-
-  it('should handle SWAP_IN_PROGRESS and notify both users', (done) => {
-    const spy = jest.spyOn(notificationService, 'handleSwapEvent');
-
-    emitter.emitSwapInProgress(mockSwap, mockInitiator, mockReceiver);
-
-    setImmediate(() => {
-      expect(spy).toHaveBeenCalledWith(
-        SwapEvents.SWAP_IN_PROGRESS,
-        expect.objectContaining({
-          event: SwapEvents.SWAP_IN_PROGRESS,
-          notifyUserIds: [mockInitiator.id, mockReceiver.id],
-          message: expect.stringContaining('started'),
-        })
-      );
-      spy.mockRestore();
-      done();
+    it('should handle swap events', async () => {
+      const mockObserver = { getChannel: () => 'inapp', update: jest.fn() };
+      notificationService.addObserver(mockObserver);
+      prisma.user.findUnique.mockResolvedValue(mockUser);
+      
+      notificationService.registerListeners();
+      
+      const swap = { id: 'sw1' };
+      const initiator = { id: 'u1', profile: { displayName: 'Alice' } };
+      const receiver = { id: 'user-1' };
+      
+      mockSwapEmitter.emitSwapCreated(swap, initiator, receiver);
+      
+      await new Promise(resolve => setImmediate(resolve));
+      expect(mockObserver.update).toHaveBeenCalled();
     });
   });
 });

@@ -7,7 +7,7 @@ const logger = require('./utils/logger');
 const NotificationService = require('./services/notification.service');
 const CronJobManager = require('./cron/session-reminders.cron');
 const { createServer } = require('http');
-const { setupSocket } = require('./socket/chat.socket');
+const { setupSocket, closePresenceClient } = require('./socket/chat.socket');
 const EmailObserver = require('./observers/email.observer');
 const PushObserver = require('./observers/push.observer');
 const InAppObserver = require('./observers/inapp.observer');
@@ -48,6 +48,7 @@ startServer();
 // Handle graceful shutdown
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM signal received: closing HTTP server');
+  await closePresenceClient();
   await redisClient.disconnect();
   await prisma.$disconnect();
   process.exit(0);
@@ -55,6 +56,7 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', async () => {
   logger.info('SIGINT signal received: closing HTTP server');
+  await closePresenceClient();
   await redisClient.disconnect();
   await prisma.$disconnect();
   process.exit(0);

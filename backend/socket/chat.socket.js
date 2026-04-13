@@ -19,6 +19,35 @@ const PRESENCE_TTL_SECONDS = 300;
 const PRESENCE_KEY_PREFIX = 'skillswap:online:';
 
 /**
+ * Shared Redis client for presence operations.
+ * Reuses a long-lived connection instead of creating one per call.
+ * @type {import('ioredis').Redis|null}
+ */
+let presenceRedisClient = null;
+
+/**
+ * Returns a shared, long-lived Redis client for presence ops.
+ * @returns {import('ioredis').Redis|null}
+ */
+function getPresenceRedisClient() {
+  if (!process.env.REDIS_URL) return null;
+  if (presenceRedisClient) return presenceRedisClient;
+
+  presenceRedisClient = new Redis(process.env.REDIS_URL);
+  presenceRedisClient.on('error', (err) => {
+    logger.warn('Presence Redis client error', { error: err.message });
+  });
+
+  return presenceRedisClient;
+}
+
+/**
+ * Map<userId, number> — tracks how many sockets a user has open.
+ * Only marks offline when the last socket disconnects.
+ */
+const connectionCounts = new Map();
+
+/**
  * Sets up the Socket.io server with Redis adapter, authentication,
  * online presence, typing indicators, and chat event handling.
  *
@@ -80,7 +109,9 @@ const setupSocket = (httpServer) => {
     // Join per-user room for in-app notifications
     socket.join(`user:${userId}`);
 
-    // ── Online Presence: mark online ──
+    // ── Online Presence: increment connection count & mark online ──
+    const currentCount = (connectionCounts.get(userId) || 0) + 1;
+    connectionCounts.set(userId, currentCount);
     await setOnline(userId);
 
     // ── chat:join ──
@@ -189,7 +220,14 @@ const setupSocket = (httpServer) => {
 
     // ── Disconnect ──
     socket.on('disconnect', async () => {
-      await setOffline(userId);
+      // Decrement connection count; only go offline when last socket closes
+      const remaining = (connectionCounts.get(userId) || 1) - 1;
+      if (remaining <= 0) {
+        connectionCounts.delete(userId);
+        await setOffline(userId);
+      } else {
+        connectionCounts.set(userId, remaining);
+      }
 
       // Clean up any typing indicators for this user
       for (const [swapId, swapTyping] of typingMap.entries()) {
@@ -209,7 +247,7 @@ const setupSocket = (httpServer) => {
 };
 
 // ──────────────────────────────────────────────────
-// Online Presence helpers (Redis-backed)
+// Online Presence helpers (Redis-backed, shared client)
 // ──────────────────────────────────────────────────
 
 /**
@@ -218,10 +256,9 @@ const setupSocket = (httpServer) => {
  */
 async function setOnline(userId) {
   try {
-    if (!process.env.REDIS_URL) return;
-    const client = new Redis(process.env.REDIS_URL);
+    const client = getPresenceRedisClient();
+    if (!client) return;
     await client.set(`${PRESENCE_KEY_PREFIX}${userId}`, '1', 'EX', PRESENCE_TTL_SECONDS);
-    await client.quit();
   } catch (err) {
     logger.warn('Presence setOnline failed', { userId, error: err.message });
   }
@@ -232,10 +269,9 @@ async function setOnline(userId) {
  */
 async function setOffline(userId) {
   try {
-    if (!process.env.REDIS_URL) return;
-    const client = new Redis(process.env.REDIS_URL);
+    const client = getPresenceRedisClient();
+    if (!client) return;
     await client.del(`${PRESENCE_KEY_PREFIX}${userId}`);
-    await client.quit();
   } catch (err) {
     logger.warn('Presence setOffline failed', { userId, error: err.message });
   }
@@ -244,18 +280,29 @@ async function setOffline(userId) {
 /**
  * Check if a user is online.
  * @param {string} userId
- * @returns {Promise<boolean>}
+ * @returns {Promise<{isOnline: boolean, presenceAvailable: boolean}>}
  */
 async function isUserOnline(userId) {
+  const client = getPresenceRedisClient();
+  if (!client) return { isOnline: false, presenceAvailable: false };
+
   try {
-    if (!process.env.REDIS_URL) return false;
-    const client = new Redis(process.env.REDIS_URL);
     const val = await client.get(`${PRESENCE_KEY_PREFIX}${userId}`);
-    await client.quit();
-    return val === '1';
+    return { isOnline: val === '1', presenceAvailable: true };
   } catch (err) {
     logger.warn('Presence isOnline check failed', { userId, error: err.message });
-    return false;
+    return { isOnline: false, presenceAvailable: false };
+  }
+}
+
+/**
+ * Gracefully close the shared presence Redis client.
+ * Call during application shutdown.
+ */
+async function closePresenceClient() {
+  if (presenceRedisClient) {
+    await presenceRedisClient.quit();
+    presenceRedisClient = null;
   }
 }
 
@@ -263,4 +310,5 @@ module.exports = {
   setupSocket,
   getIo: () => io,
   isUserOnline,
+  closePresenceClient,
 };
