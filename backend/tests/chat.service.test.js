@@ -26,10 +26,7 @@ jest.mock('../repositories/message.repository', () => ({
 
 const prisma = require('../config/db.config');
 const messageRepository = require('../repositories/message.repository');
-const ChatService = require('../services/chat.service');
-
-// ChatService is exported as a singleton; we can use it directly.
-const chatService = ChatService;
+const chatService = require('../services/chat.service');
 
 describe('ChatService', () => {
   afterEach(() => jest.clearAllMocks());
@@ -95,6 +92,17 @@ describe('ChatService', () => {
         msgType: 'TEXT',
       });
       expect(result).toEqual(savedMsg);
+    });
+
+    it('should default to TEXT msgType when not provided', async () => {
+      prisma.chat.findUnique.mockResolvedValue(mockChat);
+      messageRepository.createMessage.mockResolvedValue({ id: 'msg-2' });
+
+      await chatService.sendMessage(CHAT_ID, USER_A, { content: 'hello' });
+
+      expect(messageRepository.createMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ msgType: 'TEXT' }),
+      );
     });
 
     it('should throw if chat is not found', async () => {
@@ -192,6 +200,7 @@ describe('ChatService', () => {
 
       const count = await chatService.getUnreadCount(USER_A);
       expect(count).toBe(12);
+      expect(messageRepository.getUnreadCounts).toHaveBeenCalledWith(USER_A);
     });
   });
 
