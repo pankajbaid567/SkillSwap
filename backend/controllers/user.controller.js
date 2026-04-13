@@ -1,5 +1,6 @@
 const userService = require('../services/user.service');
 const { sendSuccess } = require('../utils/response.util');
+const { isUserOnline } = require('../socket/chat.socket');
 
 class UserController {
   constructor() {
@@ -52,7 +53,7 @@ class UserController {
   async searchUsers(req, res, next) {
     try {
       const query = req.query.q || '';
-      const type = req.query.type; // 'offer' or 'want'
+      const type = req.query.type;
       const page = req.query.page || 1;
       const limit = req.query.limit || 20;
 
@@ -107,6 +108,16 @@ class UserController {
       const { id } = req.params;
       await userService.removeAvailabilitySlot(req.user.id, id);
       return sendSuccess(res, 200, 'Availability slot removed successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getOnlineStatus(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { isOnline, presenceAvailable } = await isUserOnline(id);
+      return sendSuccess(res, 200, 'Online status retrieved', { isOnline, presenceAvailable });
     } catch (error) {
       next(error);
     }

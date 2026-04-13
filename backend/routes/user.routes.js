@@ -321,6 +321,27 @@ router.post('/me/availability', validateBody(addAvailabilitySlotSchema), userCon
  */
 router.delete('/me/availability/:id', userController.removeAvailabilitySlot);
 
+// Online presence check
+/**
+ * @swagger
+ * /api/users/{id}/online:
+ *   get:
+ *     summary: Check if a user is currently online
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Online status
+ */
+router.get('/:id/online', userController.getOnlineStatus);
+
 // Public Profile Route (Dynamic ID last)
 /**
  * @swagger
