@@ -221,6 +221,7 @@ export const userAPI = {
   addSkill: async (payload) => request({ method: 'post', url: '/users/me/skills', data: payload }),
   removeSkill: async (skillId) => request({ method: 'delete', url: `/users/me/skills/${skillId}` }),
   addAvailability: async (payload) => request({ method: 'post', url: '/users/me/availability', data: payload }),
+  updateAvailability: async (payload) => request({ method: 'put', url: '/users/me/availability', data: payload }),
   searchUsers: async (params = {}) => request({ method: 'get', url: '/users/search', params }),
   getPublicProfile: async (userId) => request({ method: 'get', url: `/users/${userId}` }),
   updateNotificationPreferences: async (payload) => request({ method: 'put', url: '/users/me/notification-preferences', data: payload }),

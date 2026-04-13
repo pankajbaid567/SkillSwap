@@ -90,6 +90,10 @@ const addAvailabilitySlotSchema = z.object({
   isRecurring: z.boolean().default(false)
 });
 
+const bulkUpdateAvailabilitySchema = z.object({
+  availability: z.record(z.string(), z.array(z.string()))
+});
+
 /**
  * @typedef {Object} UpdateNotificationPreferencesDto
  * @property {boolean} [notifyEmail]
@@ -320,8 +324,30 @@ router.delete('/me/skills/:id', userController.removeSkill);
  *         description: Availability slot added
  *       400:
  *         description: Slot cannot span midnight
+ *   put:
+ *     summary: Bulk update availability
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               availability:
+ *                 type: object
+ *                 additionalProperties:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *     responses:
+ *       200:
+ *         description: Availability updated
  */
 router.post('/me/availability', validateBody(addAvailabilitySlotSchema), userController.addAvailabilitySlot);
+router.put('/me/availability', validateBody(bulkUpdateAvailabilitySchema), userController.bulkUpdateAvailability);
 
 /**
  * @swagger

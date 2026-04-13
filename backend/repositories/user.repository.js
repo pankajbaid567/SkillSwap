@@ -120,6 +120,13 @@ class UserRepository {
     });
   }
 
+  async replaceAvailabilitySlots(userId, slots) {
+    return await prisma.$transaction([
+      prisma.availabilitySlot.deleteMany({ where: { userId } }),
+      prisma.availabilitySlot.createMany({ data: slots })
+    ]);
+  }
+
   /**
    * Search users by displayName and skills
    */

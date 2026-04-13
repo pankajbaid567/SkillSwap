@@ -103,6 +103,15 @@ class UserController {
     }
   }
 
+  async bulkUpdateAvailability(req, res, next) {
+    try {
+      const data = await userService.bulkUpdateAvailability(req.user.id, req.body.availability);
+      return sendSuccess(res, 200, 'Availability updated successfully', data);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async removeAvailabilitySlot(req, res, next) {
     try {
       const { id } = req.params;
