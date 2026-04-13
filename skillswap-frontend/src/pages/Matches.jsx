@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Search, X, BarChart3, AlertCircle } from 'lucide-react';
 import MatchCard from '../components/MatchCard';
@@ -16,7 +16,7 @@ const ExplainModal = ({ matchId, onClose }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useMemo(() => {
+  useEffect(() => {
     if (!matchId) return;
     setLoading(true);
     matchAPI.explainMatch(matchId).then((res) => {

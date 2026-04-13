@@ -4,7 +4,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera, MapPin, Save, Star, Search, Trash2, Calendar, Bell, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuthContext } from '../contexts/AuthContext';
 import { userAPI, reviewAPI } from '../services/api.service';
-import { validateEmail } from '../utils/validators';
 import { formatDateTime } from '../utils/formatters';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -22,7 +21,7 @@ const Profile = () => {
     initialData: user,
   });
 
-  const current = profileQuery.data || user || {};
+  const current = useMemo(() => profileQuery.data || user || {}, [profileQuery.data, user]);
 
   // Reviews Query
   const reviewsQuery = useQuery({
@@ -38,8 +37,8 @@ const Profile = () => {
   const [avatarPreview, setAvatarPreview] = useState(null);
   const fileInputRef = useRef(null);
   const [skillSearch, setSkillSearch] = useState('');
-  const [offeredSkillProficiency, setOfferedSkillProficiency] = useState('Intermediate');
-  const [wantedSkillProficiency, setWantedSkillProficiency] = useState('Intermediate');
+  const offeredSkillProficiency = 'Intermediate';
+  const wantedSkillProficiency = 'Intermediate';
   const [availability, setAvailability] = useState(current.availability || {});
   
   const [notifications, setNotifications] = useState({
@@ -48,10 +47,7 @@ const Profile = () => {
      inApp: current.preferences?.inApp || true,
   });
 
-  const profileCompleteness = useMemo(() => {
-    const fields = [current.displayName || current.name, current.bio, current.location, current.timezone, current.avatarUrl];
-    return Math.round((fields.filter(Boolean).length / fields.length) * 100);
-  }, [current]);
+
 
   const handleAvatarChange = (e) => {
     const file = e.target.files[0];
@@ -96,8 +92,8 @@ const Profile = () => {
       toast.success('Skill added');
       queryClient.invalidateQueries(['profile']);
       setSkillSearch('');
-    } catch (err) {
-      toast.error(err?.message || 'Failed to add skill');
+    } catch {
+      toast.error('Failed to add skill');
     }
   };
 
@@ -107,7 +103,7 @@ const Profile = () => {
       await userAPI.removeSkill(skillId);
       toast.success('Skill removed');
       queryClient.invalidateQueries(['profile']);
-    } catch (err) {
+    } catch {
       toast.error('Failed to remove skill');
     }
   };
@@ -130,7 +126,7 @@ const Profile = () => {
       await userAPI.addAvailability({ availability });
       toast.success('Availability saved');
       queryClient.invalidateQueries(['profile']);
-    } catch (err) {
+    } catch {
       toast.error('Failed to save availability');
     }
   };
@@ -141,7 +137,7 @@ const Profile = () => {
      try {
        await userAPI.updateNotificationPreferences(nextNotifs);
        toast.success('Preferences updated');
-     } catch (err) {
+     } catch {
        toast.error('Failed to update preferences');
        setNotifications(notifications); // revert
      }

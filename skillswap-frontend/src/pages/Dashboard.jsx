@@ -28,14 +28,13 @@ const Dashboard = () => {
   const { user } = useAuth();
   const { matches, stats: matchStats, isLoading: matchesLoading } = useMatches({ limit: 4 });
   const { activeSwaps, swapStats, upcomingSessions, isLoading: swapsLoading } = useSwap();
-  const { unreadCount, notifications } = useNotifications({ limit: 5 });
 
-  const stats = useMemo(() => ([
+  const stats = [
     { label: 'Active Swaps', value: activeSwaps.length, note: 'In progress exchanges', icon: 'workflow', color: 'from-cyan-500/20 to-transparent' },
     { label: 'Pending Requests', value: matchStats?.pendingMatches ?? matches.length, note: 'Awaiting your review', icon: 'users', color: 'from-indigo-500/20 to-transparent' },
     { label: 'Completed', value: swapStats?.completedSwaps ?? 0, note: 'Total finished swaps', icon: 'sparkles', color: 'from-emerald-500/20 to-transparent' },
     { label: 'Avg Rating', value: user?.avgRating != null ? Number(user.avgRating).toFixed(1) : '—', note: 'Based on feedback', icon: 'star', color: 'from-amber-500/20 to-transparent' },
-  ]), [activeSwaps.length, matchStats?.pendingMatches, matches.length, swapStats?.completedSwaps, user?.avgRating]);
+  ];
 
   return (
     <div className="space-y-8">
