@@ -100,11 +100,13 @@ const Profile = () => {
   const handleRemoveSkill = async (skillId) => {
     if(!window.confirm('Remove this skill?')) return;
     try {
+      console.log('Attempting to remove skill with ID:', skillId);
       await userAPI.removeSkill(skillId);
       toast.success('Skill removed');
       queryClient.invalidateQueries(['profile']);
-    } catch {
-      toast.error('Failed to remove skill');
+    } catch (err) {
+      console.error('Failed to remove skill:', err);
+      toast.error('Failed to remove skill: ' + (err?.message || 'Unknown error'));
     }
   };
 
