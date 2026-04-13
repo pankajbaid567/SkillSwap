@@ -18,6 +18,7 @@ const ExplainModal = ({ matchId, onClose }) => {
 
   useEffect(() => {
     if (!matchId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     matchAPI.explainMatch(matchId).then((res) => {
       setData(res?.explanation || res);

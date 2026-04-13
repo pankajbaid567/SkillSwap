@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera, MapPin, Save, Star, Search, Trash2, Calendar, Bell, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -39,12 +39,36 @@ const Profile = () => {
   const [skillSearch, setSkillSearch] = useState('');
   const offeredSkillProficiency = 'Intermediate';
   const wantedSkillProficiency = 'Intermediate';
-  const [availability, setAvailability] = useState(current.availability || {});
+  const initialAvailability = useMemo(() => {
+    if (!current.availabilitySlots) return {};
+    const dayReverseMap = { 0: 'Sunday', 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday' };
+    const res = {};
+    for (const slot of current.availabilitySlots) {
+      const dayName = dayReverseMap[slot.dayOfWeek];
+      if (!dayName) continue;
+      const startHour = new Date(slot.slotStart).getUTCHours();
+      let slotName = '';
+      if (startHour === 8) slotName = 'Morning';
+      else if (startHour === 12) slotName = 'Afternoon';
+      else if (startHour === 17) slotName = 'Evening';
+      if (slotName) {
+        if (!res[dayName]) res[dayName] = [];
+        res[dayName].push(slotName);
+      }
+    }
+    return res;
+  }, [current.availabilitySlots]);
+
+  const [availability, setAvailability] = useState(initialAvailability);
+
+  useEffect(() => {
+    setAvailability(initialAvailability);
+  }, [initialAvailability]);
   
   const [notifications, setNotifications] = useState({
-     email: current.preferences?.email || false,
-     push: current.preferences?.push || false,
-     inApp: current.preferences?.inApp || true,
+     notifyEmail: current.profile?.notifyEmail ?? false,
+     notifyPush: current.profile?.notifyPush ?? false,
+     notifyInApp: current.profile?.notifyInApp ?? true,
   });
 
 
@@ -125,7 +149,7 @@ const Profile = () => {
 
   const handleSaveAvailability = async () => {
     try {
-      await userAPI.addAvailability({ availability });
+      await userAPI.updateAvailability({ availability });
       toast.success('Availability saved');
       queryClient.invalidateQueries(['profile']);
     } catch {
@@ -172,8 +196,8 @@ const Profile = () => {
              <section className="rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-xl shadow-black/10 backdrop-blur-xl">
                <div className="flex items-center gap-6">
                  <div onClick={() => fileInputRef.current?.click()} className="relative group cursor-pointer flex h-24 w-24 overflow-hidden items-center justify-center rounded-3xl bg-slate-900 border border-white/10 shadow-lg shrink-0">
-                   {avatarPreview || current.avatarUrl ? (
-                     <img src={avatarPreview || current.avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
+                   {avatarPreview || current.profile?.avatarUrl || current.avatarUrl ? (
+                     <img src={avatarPreview || current.profile?.avatarUrl || current.avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
                    ) : (
                      <Camera className="h-8 w-8 text-cyan-400/50" />
                    )}
@@ -191,22 +215,22 @@ const Profile = () => {
                <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
                  <label className="block">
                    <span className="mb-2 block text-sm font-medium text-white/80">Display Name</span>
-                   <input name="displayName" defaultValue={current.displayName || current.name || ''} className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/50" />
+                   <input name="displayName" defaultValue={current.profile?.displayName || current.displayName || current.name || ''} className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/50" />
                  </label>
                  
                  <label className="block">
                    <span className="mb-2 block text-sm font-medium text-white/80">Bio</span>
-                   <textarea name="bio" rows={3} defaultValue={current.bio || ''} className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/50 resize-none" />
+                   <textarea name="bio" rows={3} defaultValue={current.profile?.bio || current.bio || ''} className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/50 resize-none" />
                  </label>
 
                  <div className="grid grid-cols-2 gap-4">
                    <label className="block">
                      <span className="mb-2 block text-sm font-medium text-white/80">Location</span>
-                     <input name="location" defaultValue={current.location || ''} className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/50" />
+                     <input name="location" defaultValue={current.profile?.location || current.location || ''} className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/50" />
                    </label>
                    <label className="block">
                      <span className="mb-2 block text-sm font-medium text-white/80">Timezone</span>
-                     <select name="timezone" defaultValue={current.timezone || 'UTC'} className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/50 appearance-none">
+                     <select name="timezone" defaultValue={current.profile?.timezone || current.timezone || 'UTC'} className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/50 appearance-none">
                         <option value="UTC">UTC</option>
                         <option value="EST">EST</option>
                         <option value="PST">PST</option>
@@ -229,9 +253,9 @@ const Profile = () => {
                 </p>
                 <div className="space-y-4">
                    {[
-                     { key: 'email', label: 'Email Notifications', desc: 'Receive daily digests and important updates' },
-                     { key: 'push', label: 'Push Notifications', desc: 'Get notified in the background on your device' },
-                     { key: 'inApp', label: 'In-App Notifications', desc: 'Alerts while you are actively using the app' },
+                     { key: 'notifyEmail', label: 'Email Notifications', desc: 'Receive daily digests and important updates' },
+                     { key: 'notifyPush', label: 'Push Notifications', desc: 'Get notified in the background on your device' },
+                     { key: 'notifyInApp', label: 'In-App Notifications', desc: 'Alerts while you are actively using the app' },
                    ].map(notif => (
                      <div key={notif.key} className="flex items-center justify-between bg-slate-950/40 p-4 rounded-2xl border border-white/5">
                         <div>

@@ -36,7 +36,7 @@ describe('UserService', () => {
 
   describe('updateProfile()', () => {
     it('should update profile successfully', async () => {
-      defaultUserRepository.findWithSkillsAndAvailability.mockResolvedValue({ id: 1 });
+      defaultUserRepository.findWithSkillsAndAvailability.mockResolvedValue({ id: 1, displayName: 'New' });
       defaultUserRepository.updateProfile.mockResolvedValue({ displayName: 'New' });
       
       const result = await userService.updateProfile(1, { displayName: 'New' });
@@ -46,7 +46,7 @@ describe('UserService', () => {
 
   describe('updateNotificationPreferences()', () => {
     it('should update preferences successfully', async () => {
-      defaultUserRepository.findWithSkillsAndAvailability.mockResolvedValue({ id: 1 });
+      defaultUserRepository.findWithSkillsAndAvailability.mockResolvedValue({ id: 1, notifyEmail: true });
       defaultUserRepository.updateProfile.mockResolvedValue({ notifyEmail: true });
       
       const result = await userService.updateNotificationPreferences(1, { notifyEmail: true });

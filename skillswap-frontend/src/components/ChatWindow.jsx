@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { SendHorizonal, MessageCircleMore, Check, CheckCheck } from 'lucide-react';
-import { formatRelativeTime, truncateText } from '../utils/formatters';
+import { formatRelativeTime } from '../utils/formatters';
 import { useAuth } from '../hooks/useAuth';
 
 const ChatWindow = ({ messages = [], title = 'Chat', subtitle = 'Conversation linked to this swap', onSend, onTyping, isTyping = {}, active = true }) => {

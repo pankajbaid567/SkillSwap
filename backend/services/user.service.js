@@ -47,7 +47,7 @@ class UserService {
     // Basic verification
     await this.getProfile(userId);
 
-    const updatedProfile = await this.userRepository.updateProfile(userId, {
+    await this.userRepository.updateProfile(userId, {
       displayName: dto.displayName,
       bio: dto.bio,
       avatarUrl: dto.avatarUrl,
@@ -55,19 +55,19 @@ class UserService {
       timezone: dto.timezone
     });
 
-    return updatedProfile;
+    return await this.getProfile(userId);
   }
 
   async updateNotificationPreferences(userId, dto) {
     await this.getProfile(userId);
 
-    const updatedProfile = await this.userRepository.updateProfile(userId, {
+    await this.userRepository.updateProfile(userId, {
       notifyEmail: dto.notifyEmail,
       notifyPush: dto.notifyPush,
       notifyInApp: dto.notifyInApp,
     });
 
-    return updatedProfile;
+    return await this.getProfile(userId);
   }
 
   async addSkill(userId, skillDto) {
@@ -181,6 +181,41 @@ class UserService {
       slotEnd: slotDto.slotEnd,
       isRecurring: slotDto.isRecurring
     });
+  }
+
+  async bulkUpdateAvailability(userId, availabilityMap) {
+    const dayMap = {
+      'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3,
+      'Thursday': 4, 'Friday': 5, 'Saturday': 6
+    };
+
+    const slotTimes = {
+      'Morning':   { start: '1970-01-01T08:00:00.000Z', end: '1970-01-01T12:00:00.000Z' },
+      'Afternoon': { start: '1970-01-01T12:00:00.000Z', end: '1970-01-01T17:00:00.000Z' },
+      'Evening':   { start: '1970-01-01T17:00:00.000Z', end: '1970-01-01T21:00:00.000Z' }
+    };
+
+    const slots = [];
+    for (const [day, daySlots] of Object.entries(availabilityMap)) {
+      const dayIndex = dayMap[day];
+      if (dayIndex === undefined) continue;
+
+      for (const slotName of daySlots) {
+        const times = slotTimes[slotName];
+        if (times) {
+          slots.push({
+            userId,
+            dayOfWeek: dayIndex,
+            slotStart: new Date(times.start),
+            slotEnd: new Date(times.end),
+            isRecurring: true
+          });
+        }
+      }
+    }
+
+    await this.userRepository.replaceAvailabilitySlots(userId, slots);
+    return await this.getProfile(userId);
   }
 
   async removeAvailabilitySlot(userId, slotId) {
