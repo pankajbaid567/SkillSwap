@@ -14,8 +14,8 @@ const swapSteps = ['PENDING', 'ACCEPTED', 'ACTIVE', 'COMPLETED'];
 const SwapDetail = () => {
   const { swapId } = useParams();
   const navigate = useNavigate();
-  const { swap, isLoading, acceptSwap, cancelSwap, confirmComplete, scheduleSession } = useSwap(swapId);
-  const { messages, sendMessage, sendTyping, isTyping } = useChat(swapId);
+  const { swap, isLoading, acceptSwap, cancelSwap, confirmComplete, scheduleSession, startSwap } = useSwap(swapId);
+  const { messages, sendMessage, deleteMessage, sendTyping, isTyping } = useChat(swapId);
 
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
@@ -197,8 +197,11 @@ const SwapDetail = () => {
                 )}
                 {(swap.status === 'ACCEPTED' || swap.status === 'ACTIVE') && (
                   <>
-                    {(!swap.sessions || swap.sessions.length === 0) && (
-                      <button onClick={handleSchedule} className="w-full rounded-full border border-indigo-400/30 bg-indigo-500/10 py-3 text-sm font-semibold text-indigo-300 transition hover:bg-indigo-500/20">Schedule Session</button>
+                    {(!swap.sessions || swap.sessions.length === 0) && swap.status === 'ACCEPTED' && (
+                      <>
+                        <button onClick={handleSchedule} className="w-full rounded-full border border-indigo-400/30 bg-indigo-500/10 py-3 text-sm font-semibold text-indigo-300 transition hover:bg-indigo-500/20">Schedule Session</button>
+                        <button onClick={async () => { try { await startSwap(swapId); toast.success('Swap started!'); } catch(e) { toast.error(e?.message||'Failed'); } }} className="w-full rounded-full border border-cyan-400/30 bg-cyan-500/10 py-3 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-500/20">Start Now</button>
+                      </>
                     )}
                     <button onClick={handleConfirm} className="w-full rounded-full border border-emerald-400/30 bg-emerald-500/10 py-3 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/20">Mark Completed</button>
                   </>
@@ -220,7 +223,10 @@ const SwapDetail = () => {
         title="Active Chat"
         subtitle="Keep the coordination in one place"
         messages={messages}
-        onSend={(content) => sendMessage(content)}
+        onSend={(content, action) => {
+           if(action === 'DELETE') return deleteMessage?.(content).catch(err => toast.error('Failed to delete'));
+           return sendMessage(content);
+        }}
         onTyping={sendTyping}
         isTyping={isTyping}
         active={swap.status !== 'CANCELLED'}

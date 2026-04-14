@@ -121,7 +121,7 @@ const Matches = () => {
 
   const handleAccept = async (match) => {
     try {
-      await acceptMatch(match.id);
+      await acceptMatch(match.matchId || match.id);
       toast.success('Match accepted');
     } catch (error) {
       toast.error(error?.message || 'Unable to accept this match');
@@ -130,7 +130,7 @@ const Matches = () => {
 
   const handleDecline = async (match) => {
     try {
-      await declineMatch({ matchId: match.id });
+      await declineMatch({ matchId: match.matchId || match.id });
       toast.success('Match declined');
     } catch (error) {
       toast.error(error?.message || 'Unable to decline this match');
@@ -211,11 +211,11 @@ const Matches = () => {
           </div>
         ) : filteredMatches.map((match) => (
           <MatchCard
-            key={match.id}
+            key={match.matchId || match.id || Math.random()}
             match={match}
             onAccept={handleAccept}
             onDecline={handleDecline}
-            onExplain={() => setExplainingMatchId(match.id)}
+            onExplain={() => setExplainingMatchId(match.matchId || match.id)}
           />
         ))}
       </section>

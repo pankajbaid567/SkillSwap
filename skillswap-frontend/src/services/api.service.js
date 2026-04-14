@@ -213,17 +213,21 @@ export const authAPI = {
     return data;
   },
   forgotPassword: async (payload) => request({ method: 'post', url: '/auth/forgot-password', data: payload }),
+  resetPassword: async (payload) => request({ method: 'post', url: '/auth/reset-password', data: payload }),
 };
 
 export const userAPI = {
   getProfile: async () => request({ method: 'get', url: '/users/me' }),
   updateProfile: async (payload) => request({ method: 'put', url: '/users/me', data: payload }),
   addSkill: async (payload) => request({ method: 'post', url: '/users/me/skills', data: payload }),
+  updateSkill: async (skillId, payload) => request({ method: 'put', url: `/users/me/skills/${skillId}`, data: payload }),
   removeSkill: async (skillId) => request({ method: 'delete', url: `/users/me/skills/${skillId}` }),
   addAvailability: async (payload) => request({ method: 'post', url: '/users/me/availability', data: payload }),
   updateAvailability: async (payload) => request({ method: 'put', url: '/users/me/availability', data: payload }),
+  removeAvailability: async (slotId) => request({ method: 'delete', url: `/users/me/availability/${slotId}` }),
   searchUsers: async (params = {}) => request({ method: 'get', url: '/users/search', params }),
   getPublicProfile: async (userId) => request({ method: 'get', url: `/users/${userId}` }),
+  getOnlineStatus: async (userId) => request({ method: 'get', url: `/users/${userId}/online` }),
   updateNotificationPreferences: async (payload) => request({ method: 'put', url: '/users/me/notification-preferences', data: payload }),
 };
 
@@ -232,7 +236,7 @@ export const matchAPI = {
   getMatchById: async (matchId) => request({ method: 'get', url: `/matches/${matchId}` }),
   acceptMatch: async (matchId) => request({ method: 'post', url: `/matches/${matchId}/accept` }),
   declineMatch: async (matchId) => request({ method: 'post', url: `/matches/${matchId}/decline` }),
-  explainMatch: async (matchId) => request({ method: 'post', url: `/matches/${matchId}/explain` }),
+  explainMatch: async (matchId) => request({ method: 'get', url: `/matches/${matchId}/explain` }),
   getStats: async () => request({ method: 'get', url: '/matches/stats' }),
 };
 
@@ -243,8 +247,11 @@ export const swapAPI = {
   acceptSwap: async (swapId) => request({ method: 'post', url: `/swaps/${swapId}/accept` }),
   declineSwap: async (swapId, payload = {}) => request({ method: 'post', url: `/swaps/${swapId}/decline`, data: payload }),
   cancelSwap: async (swapId, payload = {}) => request({ method: 'post', url: `/swaps/${swapId}/cancel`, data: payload }),
+  startSwap: async (swapId) => request({ method: 'post', url: `/swaps/${swapId}/start` }),
+  markComplete: async (swapId) => request({ method: 'post', url: `/swaps/${swapId}/complete` }),
   confirmComplete: async (swapId) => request({ method: 'post', url: `/swaps/${swapId}/complete-confirm` }),
   scheduleSession: async (swapId, payload) => request({ method: 'post', url: `/swaps/${swapId}/sessions`, data: payload }),
+  rescheduleSession: async (swapId, sessionId, payload) => request({ method: 'put', url: `/swaps/${swapId}/sessions/${sessionId}/reschedule`, data: payload }),
   getActiveSwaps: async () => request({ method: 'get', url: '/swaps/active' }),
   getSwapStats: async () => request({ method: 'get', url: '/swaps/stats' }),
   getUpcomingSessions: async () => request({ method: 'get', url: '/swaps/sessions/upcoming' }),
@@ -253,11 +260,13 @@ export const swapAPI = {
 export const chatAPI = {
   getMessages: async (swapId, params = {}) => request({ method: 'get', url: `/chats/${swapId}/messages`, params }),
   getUnreadCount: async () => request({ method: 'get', url: '/chats/unread-count' }),
+  deleteMessage: async (swapId, messageId) => request({ method: 'delete', url: `/chats/${swapId}/messages/${messageId}` }),
 };
 
 export const reviewAPI = {
   submitReview: async (swapId, payload) => request({ method: 'post', url: `/swaps/${swapId}/reviews`, data: payload }),
   getReviewsForUser: async (userId, params = {}) => request({ method: 'get', url: `/users/${userId}/reviews`, params }),
+  getReviewsForSwap: async (swapId) => request({ method: 'get', url: `/swaps/${swapId}/reviews` }),
 };
 
 export const notifAPI = {

@@ -85,6 +85,37 @@ export const useSwap = (swapId, params = {}) => {
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['swap', swapId] }),
+        queryClient.invalidateQueries({ queryKey:['upcoming-sessions'] }),
+      ]);
+    },
+  });
+
+  const startSwapMutation = useMutation({
+    mutationFn: (id) => swapAPI.startSwap(id),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['swaps'] }),
+        queryClient.invalidateQueries({ queryKey: ['swap', swapId] }),
+        queryClient.invalidateQueries({ queryKey: ['active-swaps'] }),
+      ]);
+    },
+  });
+
+  const markCompleteMutation = useMutation({
+    mutationFn: (id) => swapAPI.markComplete(id),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['swap', swapId] }),
+        queryClient.invalidateQueries({ queryKey: ['active-swaps'] }),
+      ]);
+    },
+  });
+
+  const rescheduleSessionMutation = useMutation({
+    mutationFn: ({ id, sessionId, payload }) => swapAPI.rescheduleSession(id, sessionId, payload),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['swap', swapId] }),
         queryClient.invalidateQueries({ queryKey: ['upcoming-sessions'] }),
       ]);
     },
@@ -106,5 +137,8 @@ export const useSwap = (swapId, params = {}) => {
     cancelSwap: cancelSwapMutation.mutateAsync,
     confirmComplete: completeSwapMutation.mutateAsync,
     scheduleSession: scheduleSessionMutation.mutateAsync,
+    startSwap: startSwapMutation.mutateAsync,
+    markComplete: markCompleteMutation.mutateAsync,
+    rescheduleSession: rescheduleSessionMutation.mutateAsync,
   };
 };

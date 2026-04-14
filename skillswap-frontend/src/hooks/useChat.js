@@ -25,6 +25,13 @@ export const useChat = (swapId) => {
     staleTime: 10_000,
   });
 
+  const deleteMessageMutation = useMutation({
+    mutationFn: (messageId) => chatAPI.deleteMessage(swapId, messageId),
+    onSuccess: async (data, messageId) => {
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    },
+  });
+
   // Hydrate local messages state when query completes
   useEffect(() => {
     if (messagesQuery.data) {
@@ -98,5 +105,7 @@ export const useChat = (swapId) => {
     refetchUnreadCount: unreadCountQuery.refetch,
     sendMessage,
     sendTyping,
+    deleteMessage: deleteMessageMutation.mutateAsync,
+    isDeleting: deleteMessageMutation.isLoading,
   };
 };
