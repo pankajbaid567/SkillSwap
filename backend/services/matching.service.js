@@ -264,21 +264,40 @@ class MatchingService {
     await this._invalidateUserCache(match.userId1);
     await this._invalidateUserCache(match.userId2);
 
-    // Trigger SwapService.createSwap
+    // Trigger SwapService.createSwap — resolve skill IDs from both users
+    let newSwap = null;
     try {
       const SwapService = require('./swap.service');
       const swapService = new SwapService();
-      
-      // Pass minimal DTO to create a default pending swap
-      await swapService.createSwap(matchId, userId, {
-        proposedTime: new Date().toISOString(),
-        message: 'Match accepted. Let\'s swap skills!'
-      });
+
+      // Fetch full match with user skills to auto-select offered/requested skills
+      const fullMatch = await this.#matchRepository.findById(matchId);
+      const initiator = fullMatch.userId1 === userId ? fullMatch.user1 : fullMatch.user2;
+      const receiver = fullMatch.userId1 === userId ? fullMatch.user2 : fullMatch.user1;
+
+      // Pick the first TEACH skill from initiator and first LEARN skill from receiver
+      const offeredSkill = initiator.skills?.find(s => s.type === 'TEACH') || initiator.skills?.[0];
+      const requestedSkill = receiver.skills?.find(s => s.type === 'TEACH') || receiver.skills?.[0];
+
+      if (offeredSkill && requestedSkill) {
+        newSwap = await swapService.createSwap(matchId, userId, {
+          offeredSkillId: offeredSkill.id || offeredSkill.skillId,
+          requestedSkillId: requestedSkill.id || requestedSkill.skillId,
+          terms: 'Match accepted. Let\'s swap skills!',
+          scheduledAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        });
+      } else {
+        logger.warn('Cannot create swap: missing skills on one or both users', {
+          matchId,
+          initiatorSkills: initiator.skills?.length || 0,
+          receiverSkills: receiver.skills?.length || 0,
+        });
+      }
     } catch (err) {
       logger.error('Failed to create swap for accepted match', { matchId, error: err.message });
     }
 
-    return updated;
+    return { match: updated, swap: newSwap };
   }
 
   /**

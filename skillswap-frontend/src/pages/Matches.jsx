@@ -4,6 +4,7 @@ import { Search, X, BarChart3, AlertCircle } from 'lucide-react';
 import MatchCard from '../components/MatchCard';
 import { useMatches } from '../hooks/useMatches';
 import { matchAPI } from '../services/api.service';
+import { useNavigate } from 'react-router-dom';
 
 const strategyOptions = [
   { value: 'skill', label: 'Skill-Based' },
@@ -108,6 +109,7 @@ const ExplainModal = ({ matchId, onClose }) => {
 };
 
 const Matches = () => {
+  const navigate = useNavigate();
   const [strategy, setStrategy] = useState('skill');
   const [query, setQuery] = useState('');
   const [explainingMatchId, setExplainingMatchId] = useState(null);
@@ -121,8 +123,14 @@ const Matches = () => {
 
   const handleAccept = async (match) => {
     try {
-      await acceptMatch(match.id);
-      toast.success('Match accepted');
+      const res = await acceptMatch(match.matchId || match.id);
+      toast.success('Match accepted! Starting a new swap...');
+      
+      if (res && res.swap && res.swap.id) {
+        navigate(`/swaps/${res.swap.id}`);
+      } else {
+        navigate('/dashboard');
+      }
     } catch (error) {
       toast.error(error?.message || 'Unable to accept this match');
     }
@@ -130,7 +138,7 @@ const Matches = () => {
 
   const handleDecline = async (match) => {
     try {
-      await declineMatch({ matchId: match.id });
+      await declineMatch({ matchId: match.matchId || match.id });
       toast.success('Match declined');
     } catch (error) {
       toast.error(error?.message || 'Unable to decline this match');
@@ -209,13 +217,13 @@ const Matches = () => {
           <div className="col-span-full rounded-[2rem] border border-dashed border-white/10 bg-white/5 p-8 text-center text-sm text-white/50">
             No matches found for the current strategy or filters.
           </div>
-        ) : filteredMatches.map((match) => (
+        ) : filteredMatches.map((match, index) => (
           <MatchCard
-            key={match.id}
+            key={match.matchId || match.id || `fallback-match-index-${index}`}
             match={match}
             onAccept={handleAccept}
             onDecline={handleDecline}
-            onExplain={() => setExplainingMatchId(match.id)}
+            onExplain={() => setExplainingMatchId(match.matchId || match.id)}
           />
         ))}
       </section>

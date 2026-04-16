@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { UserPlus, Mail, LockKeyhole, ArrowRight } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { ROUTES } from '../constants/routes';
 import { getPasswordStrength, validateRegister } from '../utils/validators';
+import { userAPI } from '../services/api.service';
 
 const strengthTone = {
   'Very weak': 'bg-rose-400',
@@ -12,6 +13,70 @@ const strengthTone = {
   Fair: 'bg-amber-400',
   Good: 'bg-cyan-400',
   Strong: 'bg-emerald-400',
+};
+
+const SkillsModal = ({ onComplete }) => {
+  const [search, setSearch] = useState('');
+  const [offered, setOffered] = useState([]);
+  const [wanted, setWanted] = useState([]);
+
+  const handleAdd = async (type) => {
+    if (!search.trim()) return;
+    try {
+      await userAPI.addSkill({ name: search, type, proficiency: 'Intermediate' });
+      if (type === 'offer') setOffered([...offered, search]);
+      else setWanted([...wanted, search]);
+      setSearch('');
+      toast.success('Skill added');
+    } catch {
+      toast.error('Failed to add skill');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-[#0b1220] p-6 shadow-2xl relative">
+        <h3 className="text-xl font-semibold text-white mb-2">What skills do you offer and want?</h3>
+        <p className="text-sm text-white/50 mb-6">Let's set up your profile so you can find matches immediately.</p>
+        
+        <div className="mb-6 flex gap-2">
+          <input 
+            value={search} 
+            onChange={(e) => setSearch(e.target.value)} 
+            placeholder="Search to add skill (e.g. React)..." 
+            className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-2 text-sm text-white outline-none focus:border-cyan-400/50" 
+          />
+          <button onClick={() => handleAdd('offer')} className="px-3 py-2 bg-emerald-500/20 text-emerald-300 rounded-xl text-xs font-bold border border-emerald-500/30 hover:bg-emerald-500/30 transition">Offer</button>
+          <button onClick={() => handleAdd('want')} className="px-3 py-2 bg-indigo-500/20 text-indigo-300 rounded-xl text-xs font-bold border border-indigo-500/30 hover:bg-indigo-500/30 transition">Want</button>
+        </div>
+
+        <div className="space-y-4 mb-8">
+          <div className="min-h-12 border border-white/5 bg-slate-950/40 p-3 rounded-2xl">
+            <p className="text-xs font-semibold text-emerald-400/80 mb-2 uppercase tracking-wider">Skills I Offer</p>
+            <div className="flex flex-wrap gap-2">
+              {offered.map((s, i) => (
+                <span key={i} className="bg-emerald-500/10 text-emerald-100 border border-emerald-500/20 rounded-full px-3 py-1 text-xs">{s}</span>
+              ))}
+              {offered.length === 0 && <span className="text-xs text-white/30 italic">None added yet.</span>}
+            </div>
+          </div>
+          <div className="min-h-12 border border-white/5 bg-slate-950/40 p-3 rounded-2xl">
+            <p className="text-xs font-semibold text-indigo-400/80 mb-2 uppercase tracking-wider">Skills I Want</p>
+            <div className="flex flex-wrap gap-2">
+              {wanted.map((s, i) => (
+                <span key={i} className="bg-indigo-500/10 text-indigo-100 border border-indigo-500/20 rounded-full px-3 py-1 text-xs">{s}</span>
+              ))}
+              {wanted.length === 0 && <span className="text-xs text-white/30 italic">None added yet.</span>}
+            </div>
+          </div>
+        </div>
+
+        <button onClick={onComplete} className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 py-3 text-slate-950 font-bold transition hover:opacity-90 shadow-lg shadow-cyan-400/20">
+          Take me to Dashboard <ArrowRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
 };
 
 const Register = () => {
@@ -23,6 +88,8 @@ const Register = () => {
     confirmPassword: '',
   });
   const [errors, setErrors] = useState({});
+  const [showSkillsModal, setShowSkillsModal] = useState(false);
+  const navigate = useNavigate();
 
   const strength = useMemo(() => getPasswordStrength(form.password), [form.password]);
 
@@ -40,11 +107,16 @@ const Register = () => {
         displayName: form.name,
         email: form.email,
         password: form.password,
-      });
-      toast.success('Account created');
+      }, false);
+      toast.success('Account created! Now add some skills.');
+      setShowSkillsModal(true);
     } catch (error) {
       toast.error(error?.message || 'Unable to create account');
     }
+  };
+
+  const handleModalComplete = () => {
+    navigate(ROUTES.dashboard, { replace: true });
   };
 
   return (
@@ -171,6 +243,8 @@ const Register = () => {
           ))}
         </div>
       </section>
+      
+      {showSkillsModal && <SkillsModal onComplete={handleModalComplete} />}
     </div>
   );
 };
