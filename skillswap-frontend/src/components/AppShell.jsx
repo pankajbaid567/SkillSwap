@@ -29,6 +29,7 @@ const AppShell = () => {
           <nav className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/5 p-1 md:flex">
             <NavLink to={ROUTES.dashboard} className={navLinkClass} end>Dashboard</NavLink>
             <NavLink to={ROUTES.matches} className={navLinkClass}>Matches</NavLink>
+            <NavLink to={ROUTES.swaps} className={navLinkClass}>Swaps</NavLink>
             <NavLink to={ROUTES.profile} className={navLinkClass}>Profile</NavLink>
           </nav>
 

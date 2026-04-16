@@ -9,6 +9,7 @@ import Matches from './pages/Matches';
 import Profile from './pages/Profile';
 import Register from './pages/Register';
 import SwapDetail from './pages/SwapDetail';
+import Swaps from './pages/Swaps';
 import PublicProfile from './pages/PublicProfile';
 
 const App = () => (
@@ -22,6 +23,7 @@ const App = () => (
         <Route index element={<Navigate to={ROUTES.dashboard} replace />} />
         <Route path={ROUTES.dashboard} element={<Dashboard />} />
         <Route path={ROUTES.matches} element={<Matches />} />
+        <Route path={ROUTES.swaps} element={<Swaps />} />
         <Route path={ROUTES.swapDetail()} element={<SwapDetail />} />
         <Route path={ROUTES.profile} element={<Profile />} />
         <Route path={ROUTES.publicProfile()} element={<PublicProfile />} />

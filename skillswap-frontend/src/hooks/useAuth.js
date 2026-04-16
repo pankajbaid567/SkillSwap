@@ -12,9 +12,11 @@ export const useAuth = () => {
     return data;
   };
 
-  const register = async (payload) => {
+  const register = async (payload, navigateAfter = true) => {
     const data = await auth.register(payload);
-    navigate(ROUTES.dashboard, { replace: true });
+    if (navigateAfter) {
+      navigate(ROUTES.dashboard, { replace: true });
+    }
     return data;
   };
 
