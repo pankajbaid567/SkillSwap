@@ -48,13 +48,7 @@ cp .env.example .env.development
 npm run dev
 ```
 
-## 👥 Team & Contributions
 
-| Member | Role | Core Contributions |
-| :--- | :--- | :--- |
-| **User** | Fullstack Engineer | Frontend/Backend Architecture, APIs Base, Match logic, Security. |
-| **Pankaj** | Project Lead | Repository initialization, UI Layout templates. |
-| **Antigravity AI** | AI Collaborator | Components: Dashboards, Profiles, Reviews, Notification APIs integrations, Vercel/Render Deployments. |
 
 ## 🏗 Design Patterns & Implementations
 

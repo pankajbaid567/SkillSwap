@@ -122,7 +122,7 @@ const Dashboard = () => {
               <div className="rounded-3xl border border-white/10 bg-slate-950/40 p-6 text-sm text-white/50">Loading requests...</div>
             ) : matches.slice(0, 3).length === 0 ? (
               <div className="rounded-3xl border border-dashed border-white/10 bg-slate-950/40 p-6 text-sm text-white/50">No pending matches. Discovery awaits!</div>
-            ) : matches.slice(0, 3).map((match) => <MatchCard key={match.id} match={match} compact />)}
+            ) : matches.slice(0, 3).map((match) => <MatchCard key={match.matchId || match.id || Math.random()} match={match} compact />)}
           </div>
         </div>
 
