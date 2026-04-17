@@ -1,4 +1,4 @@
-import { CalendarClock, CircleCheckBig, CircleX, Hourglass, MessageSquareMore } from 'lucide-react';
+import { CalendarClock, CircleCheckBig, CircleX, Hourglass, MessageSquareMore, ArrowRightLeft } from 'lucide-react';
 import { formatDateTime, truncateText } from '../utils/formatters';
 
 const statusTone = {
@@ -19,8 +19,35 @@ const statusIcon = {
   EXPIRED: CircleX,
 };
 
+/**
+ * Resolve a display name from a swap participant object.
+ * The API may nest it under `profile.displayName` or directly as `displayName`.
+ */
+const getName = (user) => {
+  if (!user) return null;
+  return (
+    user.profile?.displayName ||
+    user.displayName ||
+    user.name ||
+    user.email?.split('@')[0] ||
+    null
+  );
+};
+
 const SwapCard = ({ swap, onClick }) => {
   const StatusIcon = statusIcon[swap?.status] || Hourglass;
+
+  const initiatorName = getName(swap?.initiator);
+  const receiverName = getName(swap?.receiver);
+
+  // Build a descriptive title from participant names
+  const title = (initiatorName && receiverName)
+    ? `${initiatorName} ↔ ${receiverName}`
+    : swap?.title || swap?.match?.title || 'Swap request';
+
+  // Show skill names if available
+  const offeredSkillName = swap?.offeredSkill?.skill?.name;
+  const requestedSkillName = swap?.requestedSkill?.skill?.name;
 
   return (
     <button
@@ -30,10 +57,18 @@ const SwapCard = ({ swap, onClick }) => {
     >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-lg font-semibold text-white">{swap?.title || swap?.match?.title || 'Swap request'}</p>
-          <p className="mt-2 text-sm text-white/55">
-            {truncateText(swap?.terms || swap?.notes || 'A practical exchange in progress.', 100)}
-          </p>
+          <p className="text-lg font-semibold text-white">{title}</p>
+          {offeredSkillName && requestedSkillName ? (
+            <p className="mt-2 flex items-center gap-2 text-sm text-white/55">
+              <span className="text-cyan-300">{offeredSkillName}</span>
+              <ArrowRightLeft className="h-3 w-3 text-white/30" />
+              <span className="text-emerald-300">{requestedSkillName}</span>
+            </p>
+          ) : (
+            <p className="mt-2 text-sm text-white/55">
+              {truncateText(swap?.terms || swap?.notes || 'A practical exchange in progress.', 100)}
+            </p>
+          )}
         </div>
         <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold ${statusTone[swap?.status] || statusTone.PENDING}`}>
           <StatusIcon className="h-3.5 w-3.5" />

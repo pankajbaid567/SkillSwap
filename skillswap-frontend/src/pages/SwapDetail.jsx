@@ -1,13 +1,29 @@
 import { useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { BadgeCheck, CalendarClock, TimerReset, Video, MessageSquare, Star, X } from 'lucide-react';
+import { BadgeCheck, CalendarClock, TimerReset, Video, MessageSquare, Star, X, Clock } from 'lucide-react';
 import ChatWindow from '../components/ChatWindow';
 import SwapCard from '../components/SwapCard';
 import { useSwap } from '../hooks/useSwap';
 import { useChat } from '../hooks/useChat';
+import { useAuth } from '../hooks/useAuth';
 import { formatDateTime } from '../utils/formatters';
 import { reviewAPI } from '../services/api.service';
+
+/**
+ * Resolve a display name from the swap participant object.
+ * The API may nest it under `profile.displayName` or directly as `displayName`.
+ */
+const getParticipantName = (participant) => {
+  if (!participant) return null;
+  return (
+    participant.profile?.displayName ||
+    participant.displayName ||
+    participant.name ||
+    participant.email?.split('@')[0] ||
+    null
+  );
+};
 
 const swapSteps = ['PENDING', 'ACCEPTED', 'ACTIVE', 'COMPLETED'];
 
@@ -16,6 +32,15 @@ const SwapDetail = () => {
   const navigate = useNavigate();
   const { swap, isLoading, acceptSwap, cancelSwap, confirmComplete, scheduleSession, startSwap } = useSwap(swapId);
   const { messages, sendMessage, deleteMessage, sendTyping, isTyping } = useChat(swapId);
+  const { user: currentUser } = useAuth();
+
+  // Determine if the current user is the receiver (only the receiver can accept/decline)
+  const isReceiver = currentUser?.id && swap?.receiverId === currentUser.id;
+  const isInitiator = currentUser?.id && swap?.initiatorId === currentUser.id;
+
+  // Resolve display names
+  const initiatorName = getParticipantName(swap?.initiator);
+  const receiverName = getParticipantName(swap?.receiver);
 
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
@@ -110,22 +135,26 @@ const SwapDetail = () => {
            </div>
            
            <div className="grid md:grid-cols-2 gap-4">
-              <div className="rounded-2xl bg-slate-950/40 p-4 border border-white/5 flex items-center gap-3">
-                 <div className="h-10 w-10 bg-cyan-400/20 rounded-full flex items-center justify-center text-cyan-400">
-                   {swap.initiator?.avatarUrl ? <img src={swap.initiator.avatarUrl} alt="" className="rounded-full h-full w-full object-cover"/> : swap.initiator?.displayName?.charAt(0) || 'I'}
+              <div className={`rounded-2xl bg-slate-950/40 p-4 border flex items-center gap-3 ${isInitiator ? 'border-cyan-400/30 ring-1 ring-cyan-400/10' : 'border-white/5'}`}>
+                 <div className="h-10 w-10 bg-cyan-400/20 rounded-full flex items-center justify-center text-cyan-400 text-sm font-bold">
+                   {swap.initiator?.profile?.avatarUrl || swap.initiator?.avatarUrl
+                     ? <img src={swap.initiator.profile?.avatarUrl || swap.initiator.avatarUrl} alt="" className="rounded-full h-full w-full object-cover"/>
+                     : (initiatorName?.charAt(0)?.toUpperCase() || 'I')}
                  </div>
                  <div>
-                   <p className="text-xs uppercase text-white/40 tracking-wider">Initiator</p>
-                   <p className="text-sm font-semibold text-white">{swap.initiator?.displayName || swap.initiator?.name}</p>
+                   <p className="text-xs uppercase text-white/40 tracking-wider">Initiator {isInitiator && <span className="text-cyan-400">(You)</span>}</p>
+                   <p className="text-sm font-semibold text-white">{initiatorName || 'Unknown User'}</p>
                  </div>
               </div>
-              <div className="rounded-2xl bg-slate-950/40 p-4 border border-white/5 flex items-center gap-3">
-                 <div className="h-10 w-10 bg-emerald-400/20 rounded-full flex items-center justify-center text-emerald-400">
-                   {swap.receiver?.avatarUrl ? <img src={swap.receiver.avatarUrl} alt="" className="rounded-full h-full w-full object-cover"/> : swap.receiver?.displayName?.charAt(0) || 'R'}
+              <div className={`rounded-2xl bg-slate-950/40 p-4 border flex items-center gap-3 ${isReceiver ? 'border-emerald-400/30 ring-1 ring-emerald-400/10' : 'border-white/5'}`}>
+                 <div className="h-10 w-10 bg-emerald-400/20 rounded-full flex items-center justify-center text-emerald-400 text-sm font-bold">
+                   {swap.receiver?.profile?.avatarUrl || swap.receiver?.avatarUrl
+                     ? <img src={swap.receiver.profile?.avatarUrl || swap.receiver.avatarUrl} alt="" className="rounded-full h-full w-full object-cover"/>
+                     : (receiverName?.charAt(0)?.toUpperCase() || 'R')}
                  </div>
                  <div>
-                   <p className="text-xs uppercase text-white/40 tracking-wider">Receiver</p>
-                   <p className="text-sm font-semibold text-white">{swap.receiver?.displayName || swap.receiver?.name}</p>
+                   <p className="text-xs uppercase text-white/40 tracking-wider">Receiver {isReceiver && <span className="text-emerald-400">(You)</span>}</p>
+                   <p className="text-sm font-semibold text-white">{receiverName || 'Unknown User'}</p>
                  </div>
               </div>
            </div>
@@ -189,13 +218,22 @@ const SwapDetail = () => {
            <section className="rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-xl shadow-black/10 backdrop-blur-xl flex flex-col">
              <p className="text-sm font-medium uppercase tracking-[0.24em] text-white/45 mb-4">Actions</p>
              <div className="flex flex-col gap-3 justify-center flex-1">
-                {swap.status === 'PENDING' && (
+                {swap.status === 'PENDING' && isReceiver && (
                   <>
                     <button onClick={handleAccept} className="w-full rounded-full bg-cyan-400 py-3 text-sm font-semibold text-slate-950 transition hover:opacity-95">Accept Swap</button>
-                    <button onClick={handleCancel} className="w-full rounded-full border border-white/10 bg-white/5 py-3 text-sm font-semibold text-white/70 transition hover:bg-white/10">Decline/Cancel</button>
+                    <button onClick={handleCancel} className="w-full rounded-full border border-white/10 bg-white/5 py-3 text-sm font-semibold text-white/70 transition hover:bg-white/10">Decline</button>
                   </>
                 )}
-                {(swap.status === 'ACCEPTED' || swap.status === 'ACTIVE') && (
+                {swap.status === 'PENDING' && isInitiator && (
+                  <>
+                    <div className="flex items-center gap-3 rounded-2xl bg-cyan-400/5 border border-cyan-400/15 px-4 py-3">
+                      <Clock className="h-5 w-5 text-cyan-300 shrink-0" />
+                      <p className="text-sm text-cyan-200/80">Waiting for {receiverName || 'the receiver'} to accept this swap.</p>
+                    </div>
+                    <button onClick={handleCancel} className="w-full rounded-full border border-white/10 bg-white/5 py-3 text-sm font-semibold text-white/70 transition hover:bg-white/10">Cancel Swap</button>
+                  </>
+                )}
+                {(swap.status === 'ACCEPTED' || swap.status === 'ACTIVE' || swap.status === 'IN_PROGRESS') && (
                   <>
                     {(!swap.sessions || swap.sessions.length === 0) && swap.status === 'ACCEPTED' && (
                       <>
@@ -204,6 +242,7 @@ const SwapDetail = () => {
                       </>
                     )}
                     <button onClick={handleConfirm} className="w-full rounded-full border border-emerald-400/30 bg-emerald-500/10 py-3 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/20">Mark Completed</button>
+                    <button onClick={handleCancel} className="w-full rounded-full border border-white/10 bg-white/5 py-3 text-sm font-semibold text-white/70 transition hover:bg-white/10">Cancel Swap</button>
                   </>
                 )}
                 {swap.status === 'COMPLETED' && (

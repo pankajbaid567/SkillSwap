@@ -37,7 +37,14 @@ const Swaps = () => {
 
     // Filter by status tab
     if (activeTab !== 'all') {
-      list = list.filter((s) => s.status?.toUpperCase() === activeTab);
+      if (activeTab === 'ACTIVE') {
+        list = list.filter((s) => {
+          const st = s.status?.toUpperCase();
+          return st === 'ACTIVE' || st === 'IN_PROGRESS';
+        });
+      } else {
+        list = list.filter((s) => s.status?.toUpperCase() === activeTab);
+      }
     }
 
     // Filter by search query
@@ -54,7 +61,11 @@ const Swaps = () => {
     const c = { all: allSwaps.length, ACTIVE: 0, PENDING: 0, ACCEPTED: 0, COMPLETED: 0, CANCELLED: 0 };
     allSwaps.forEach((s) => {
       const status = s.status?.toUpperCase();
-      if (status && c[status] !== undefined) c[status]++;
+      if (status === 'IN_PROGRESS') {
+        c.ACTIVE++;
+      } else if (status && c[status] !== undefined) {
+        c[status]++;
+      }
     });
     return c;
   }, [allSwaps]);
