@@ -123,10 +123,10 @@ export const useSwap = (swapId, params = {}) => {
 
   return {
     swap: swapQuery.data || null,
-    swaps: swapsQuery.data?.swaps || swapsQuery.data || [],
-    activeSwaps: activeSwapsQuery.data?.swaps || activeSwapsQuery.data || [],
+    swaps: swapsQuery.data?.data || swapsQuery.data?.swaps || (Array.isArray(swapsQuery.data) ? swapsQuery.data : []),
+    activeSwaps: activeSwapsQuery.data?.swaps || (Array.isArray(activeSwapsQuery.data) ? activeSwapsQuery.data : []),
     swapStats: statsQuery.data || {},
-    upcomingSessions: upcomingSessionsQuery.data?.sessions || upcomingSessionsQuery.data || [],
+    upcomingSessions: upcomingSessionsQuery.data?.sessions || (Array.isArray(upcomingSessionsQuery.data) ? upcomingSessionsQuery.data : []),
     isLoading: swapQuery.isLoading || swapsQuery.isLoading || activeSwapsQuery.isLoading || upcomingSessionsQuery.isLoading,
     error: swapQuery.error || swapsQuery.error || activeSwapsQuery.error,
     refetchSwap: swapQuery.refetch,

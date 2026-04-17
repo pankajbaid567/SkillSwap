@@ -28,13 +28,29 @@ const CircularProgress = ({ value, label }) => {
 };
 
 const MatchCard = ({ match, onAccept, onDecline, onExplain, compact = false }) => {
-  const userTarget = match?.matchedUser || match?.user || match || {};
-  const displayName = userTarget.displayName || userTarget.name || match?.displayName || match?.name || 'Potential match';
-  const location = userTarget.location || match?.location || 'Remote friendly';
-  const rating = userTarget.avgRating || match?.avgRating;
-  const score = match?.score ?? match?.compatibilityScore ?? match?.matchScore ?? null;
-  const offers = match?.offeredSkills || match?.skillsOffered || userTarget.skills?.filter?.(s => s.type === 'offer')?.map(s => s.name) || match?.skills?.offered || [];
-  const wants = match?.wantedSkills || match?.skillsWanted || userTarget.skills?.filter?.(s => s.type === 'want')?.map(s => s.name) || match?.skills?.wanted || [];
+  const userObj = match?.matchedUser || match?.user || match;
+  const profile = userObj?.profile || userObj;
+  
+  const displayName = profile?.displayName || profile?.name || userObj?.displayName || userObj?.name || (userObj?.email?.split('@')[0]) || 'Matched Partner';
+  const location = profile?.location || userObj?.location || 'Remote friendly';
+  const rating = userObj?.avgRating || match?.avgRating;
+  const avatarUrl = profile?.avatarUrl || userObj?.avatarUrl;
+  const userId = userObj?.id || match?.id;
+  
+  let score = match?.score ?? match?.compatibilityScore ?? match?.matchScore ?? null;
+  // Automatically convert a decimal ratio to a percentage format for the UI (e.g., 0.75 -> 75)
+  if (score !== null && score !== undefined && score <= 1 && score > 0) {
+    score = score * 100;
+  }
+
+  let offers = match?.offeredSkills || match?.skillsOffered || match?.skills?.offered || [];
+  let wants = match?.wantedSkills || match?.skillsWanted || match?.skills?.wanted || [];
+
+  // Fallback to extract from raw Prisma user skills array if available
+  if (offers.length === 0 && wants.length === 0 && userObj?.skills) {
+    offers = userObj.skills.filter(s => s.type === 'TEACH').map(s => s.skill?.name || s.name).filter(Boolean);
+    wants = userObj.skills.filter(s => s.type === 'LEARN').map(s => s.skill?.name || s.name).filter(Boolean);
+  }
 
   return (
     <article className={`group relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 ${compact ? 'p-4' : 'p-5'} shadow-xl shadow-black/10 transition hover:-translate-y-1 hover:bg-white/[0.075] flex flex-col`}>
@@ -43,8 +59,8 @@ const MatchCard = ({ match, onAccept, onDecline, onExplain, compact = false }) =
       <div className="relative flex items-start justify-between gap-4">
         <div className="flex gap-4">
           <div className="h-12 w-12 rounded-full overflow-hidden bg-slate-800 flex-shrink-0">
-            {userTarget.avatarUrl ? (
-              <img src={userTarget.avatarUrl} alt={displayName} className="h-full w-full object-cover" />
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={displayName} className="h-full w-full object-cover" />
             ) : (
               <div className="h-full w-full flex items-center justify-center bg-gradient-to-br from-cyan-400 to-emerald-400 text-slate-950 font-bold text-lg">
                 {displayName.charAt(0)}
@@ -121,7 +137,7 @@ const MatchCard = ({ match, onAccept, onDecline, onExplain, compact = false }) =
           )}
           {!compact && (
             <Link 
-              to={`/profile/${userTarget.id || match?.matchId || match?.id}`}
+              to={`/users/${userId}`}
               className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 h-9 w-9 text-white/55 transition hover:bg-white/10 hover:text-white"
               title="View Profile"
             >
