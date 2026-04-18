@@ -1,7 +1,7 @@
 const fs = require('fs');
 
 async function simulateSecondary() {
-  const baseUrl = 'http://localhost:3000/api';
+  const baseUrl = process.env.API_BASE_URL || 'http://localhost:5001/api';
   const timestamp = Date.now();
   
   const ctx = {}; // context state

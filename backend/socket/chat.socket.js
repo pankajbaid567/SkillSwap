@@ -8,6 +8,25 @@ const logger = require('../utils/logger');
 
 let io;
 
+const configuredOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim()).filter(Boolean)
+  : [];
+
+const isLocalDevOrigin = (origin) => {
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+};
+
+const socketCorsOriginValidator = (origin, callback) => {
+  // Allow tools/clients without Origin header
+  if (!origin) return callback(null, true);
+
+  if (configuredOrigins.length > 0) {
+    return callback(null, configuredOrigins.includes(origin));
+  }
+
+  return callback(null, isLocalDevOrigin(origin));
+};
+
 /**
  * In-memory typing indicator tracker.
  * Map<swapId, Map<userId, timeoutHandle>>
@@ -57,9 +76,7 @@ const connectionCounts = new Map();
 const setupSocket = (httpServer) => {
   io = new Server(httpServer, {
     cors: {
-      origin: process.env.CORS_ORIGIN
-        ? process.env.CORS_ORIGIN.split(',')
-        : ['http://localhost:5173', 'http://localhost:3000'],
+      origin: socketCorsOriginValidator,
       methods: ['GET', 'POST'],
       credentials: true,
     },

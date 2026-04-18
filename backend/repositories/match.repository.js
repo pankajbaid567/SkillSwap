@@ -71,9 +71,10 @@ class MatchRepository {
    * @param {number} [pagination.page=1]
    * @param {number} [pagination.limit=20]
    * @param {string} [pagination.status] - Filter by match status
+   * @param {string} [pagination.strategyUsed] - Filter by strategy class name
    * @returns {Promise<{matches: Array, total: number}>}
    */
-  async findMatchesByUser(userId, { page = 1, limit = 20, status } = {}) {
+  async findMatchesByUser(userId, { page = 1, limit = 20, status, strategyUsed } = {}) {
     const skip = (page - 1) * limit;
 
     const whereClause = {
@@ -83,6 +84,10 @@ class MatchRepository {
 
     if (status) {
       whereClause.status = status;
+    }
+
+    if (strategyUsed) {
+      whereClause.strategyUsed = strategyUsed;
     }
 
     const [matches, total] = await Promise.all([

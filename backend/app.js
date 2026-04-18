@@ -19,10 +19,29 @@ const swaggerSpec = require('./config/swagger.config');
 
 const app = express();
 
+const configuredOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim()).filter(Boolean)
+  : [];
+
+const isLocalDevOrigin = (origin) => {
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+};
+
+const corsOriginValidator = (origin, callback) => {
+  // Allow non-browser tools (curl/Postman) that do not send Origin
+  if (!origin) return callback(null, true);
+
+  if (configuredOrigins.length > 0) {
+    return callback(null, configuredOrigins.includes(origin));
+  }
+
+  return callback(null, isLocalDevOrigin(origin));
+};
+
 // Global Middlewares
 app.use(helmet());
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000'],
+  origin: corsOriginValidator,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],

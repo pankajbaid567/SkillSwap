@@ -7,7 +7,7 @@ const logger = require('../utils/logger');
 /**
  * Cache key prefix and TTL constants.
  */
-const CACHE_KEY_PREFIX = 'skillswap:matches';
+const CACHE_KEY_PREFIX = 'skillswap:matches:v2';
 const CACHE_TTL_SECONDS = 600; // 10 minutes
 const DEFAULT_MATCH_EXPIRY_DAYS = 7;
 
@@ -89,6 +89,7 @@ class MatchingService {
     const page = parseInt(options.page, 10) || 1;
     const limit = Math.min(parseInt(options.limit, 10) || 20, 50);
     const strategy = this.strategyName;
+    const strategyClassName = this.#strategy.constructor.name;
 
     // 1. Build cache key
     const cacheKey = `${CACHE_KEY_PREFIX}:${userId}:${strategy}:${page}`;
@@ -108,8 +109,52 @@ class MatchingService {
       };
     }
 
-    // 3. Cache miss — compute matches
+    // 3. Cache miss — first return existing pending matches for this strategy
     logger.info('Cache miss — computing matches', { userId, strategy, page });
+
+    const existing = await this.#matchRepository.findMatchesByUser(userId, {
+      page,
+      limit,
+      status: 'pending',
+      strategyUsed: strategyClassName,
+    });
+
+    if ((existing.matches || []).length > 0) {
+      const computedAt = new Date().toISOString();
+      const response = {
+        matches: existing.matches.map((match) => {
+          const counterpart = match.userId1 === userId ? match.user2 : match.user1;
+          return {
+            matchId: match.id,
+            matchedUser: this._formatMatchedUser(counterpart),
+            compatibilityScore: parseFloat(match.compatibilityScore) || 0,
+            sharedInterests: match.sharedInterests || [],
+            matchedAt: match.matchedAt,
+          };
+        }),
+        pagination: {
+          page,
+          limit,
+          total: existing.total,
+        },
+        meta: {
+          strategy,
+          computedAt,
+          cached: false,
+          source: 'existing',
+        },
+      };
+
+      try {
+        await this.#cache.set(cacheKey, response, CACHE_TTL_SECONDS);
+      } catch (err) {
+        logger.warn('Cache error during set', { error: err.message });
+      }
+
+      return response;
+    }
+
+    // 4. No pending records found — compute new candidates
 
     // Fetch the seeking user
     const user = await this.#userRepository.findWithSkillsAndAvailability(userId);
@@ -194,7 +239,7 @@ class MatchingService {
       meta: { strategy, computedAt, cached: false },
     };
 
-    // 4. Store in cache with TTL
+    // 5. Store in cache with TTL
     try {
       await this.#cache.set(cacheKey, response, CACHE_TTL_SECONDS);
     } catch (err) {
@@ -264,40 +309,7 @@ class MatchingService {
     await this._invalidateUserCache(match.userId1);
     await this._invalidateUserCache(match.userId2);
 
-    // Trigger SwapService.createSwap — resolve skill IDs from both users
-    let newSwap = null;
-    try {
-      const SwapService = require('./swap.service');
-      const swapService = new SwapService();
-
-      // Fetch full match with user skills to auto-select offered/requested skills
-      const fullMatch = await this.#matchRepository.findById(matchId);
-      const initiator = fullMatch.userId1 === userId ? fullMatch.user1 : fullMatch.user2;
-      const receiver = fullMatch.userId1 === userId ? fullMatch.user2 : fullMatch.user1;
-
-      // Pick the first TEACH skill from initiator and first LEARN skill from receiver
-      const offeredSkill = initiator.skills?.find(s => s.type === 'TEACH') || initiator.skills?.[0];
-      const requestedSkill = receiver.skills?.find(s => s.type === 'TEACH') || receiver.skills?.[0];
-
-      if (offeredSkill && requestedSkill) {
-        newSwap = await swapService.createSwap(matchId, userId, {
-          offeredSkillId: offeredSkill.id || offeredSkill.skillId,
-          requestedSkillId: requestedSkill.id || requestedSkill.skillId,
-          terms: 'Match accepted. Let\'s swap skills!',
-          scheduledAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        });
-      } else {
-        logger.warn('Cannot create swap: missing skills on one or both users', {
-          matchId,
-          initiatorSkills: initiator.skills?.length || 0,
-          receiverSkills: receiver.skills?.length || 0,
-        });
-      }
-    } catch (err) {
-      logger.error('Failed to create swap for accepted match', { matchId, error: err.message });
-    }
-
-    return { match: updated, swap: newSwap };
+    return updated;
   }
 
   /**

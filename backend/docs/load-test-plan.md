@@ -25,7 +25,7 @@ npm install -g artillery-engine-socketio-v3
 
 ```yaml
 config:
-  target: "ws://localhost:3000"
+  target: "ws://localhost:5001"
   phases:
     - duration: 30       # Ramp-up
       arrivalRate: 10    # 10 new connections per second

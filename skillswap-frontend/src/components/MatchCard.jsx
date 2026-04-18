@@ -1,5 +1,6 @@
 import { ArrowRightLeft, Info, MapPin, Sparkles, Star, UserPlus } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { ROUTES } from '../constants/routes';
 
 const CircularProgress = ({ value, label }) => {
   const percentage = Math.min(100, Math.max(0, value));
@@ -35,7 +36,7 @@ const MatchCard = ({ match, onAccept, onDecline, onExplain, compact = false }) =
   const location = profile?.location || userObj?.location || 'Remote friendly';
   const rating = userObj?.avgRating || match?.avgRating;
   const avatarUrl = profile?.avatarUrl || userObj?.avatarUrl;
-  const userId = userObj?.id || match?.matchId || match?.id;
+  const userId = userObj?.id || match?.userId || match?.matchId || match?.id || null;
   
   let score = match?.score ?? match?.compatibilityScore ?? match?.matchScore ?? null;
   // Automatically convert a decimal ratio to a percentage format for the UI (e.g., 0.75 -> 75)
@@ -48,8 +49,20 @@ const MatchCard = ({ match, onAccept, onDecline, onExplain, compact = false }) =
 
   // Fallback to extract from raw Prisma user skills array if available
   if (offers.length === 0 && wants.length === 0 && userObj?.skills) {
-    offers = userObj.skills.filter(s => s.type === 'TEACH' || s.type === 'offer').map(s => s.skill?.name || s.name).filter(Boolean);
-    wants = userObj.skills.filter(s => s.type === 'LEARN' || s.type === 'want').map(s => s.skill?.name || s.name).filter(Boolean);
+    offers = userObj.skills
+      .filter((s) => {
+        const type = String(s.type || '').toLowerCase();
+        return type === 'teach' || type === 'offer';
+      })
+      .map((s) => s.skill?.name || s.name)
+      .filter(Boolean);
+    wants = userObj.skills
+      .filter((s) => {
+        const type = String(s.type || '').toLowerCase();
+        return type === 'learn' || type === 'want';
+      })
+      .map((s) => s.skill?.name || s.name)
+      .filter(Boolean);
   }
 
   return (
@@ -136,13 +149,19 @@ const MatchCard = ({ match, onAccept, onDecline, onExplain, compact = false }) =
             </button>
           )}
           {!compact && (
-            <Link 
-              to={userId ? `/profile/${userId}` : '#'}
-              className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 h-9 w-9 text-white/55 transition hover:bg-white/10 hover:text-white"
-              title="View Profile"
-            >
-              <UserPlus className="h-4 w-4" />
-            </Link>
+            userId ? (
+              <Link
+                to={ROUTES.publicProfile(userId)}
+                className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 h-9 w-9 text-white/55 transition hover:bg-white/10 hover:text-white"
+                title="View Profile"
+              >
+                <UserPlus className="h-4 w-4" />
+              </Link>
+            ) : (
+              <span className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 h-9 w-9 text-white/30">
+                <UserPlus className="h-4 w-4" />
+              </span>
+            )
           )}
           {compact && (
             <div className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 text-[10px] text-white/50">

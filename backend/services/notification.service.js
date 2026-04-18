@@ -146,7 +146,22 @@ class NotificationService {
       prisma.notification.count({ where: { userId } }),
     ]);
 
-    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+    const totalPages = Math.ceil(total / limit);
+    return {
+      notifications: items,
+      // Backward-compatible alias for older consumers.
+      items,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages,
+      },
+      total,
+      page,
+      limit,
+      totalPages,
+    };
   }
 
   async markRead(notificationId, userId) {

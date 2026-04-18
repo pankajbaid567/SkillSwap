@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { BadgeCheck, CalendarClock, TimerReset, Video, MessageSquare, Star, X, Clock } from 'lucide-react';
 import ChatWindow from '../components/ChatWindow';
-import SwapCard from '../components/SwapCard';
 import { useSwap } from '../hooks/useSwap';
 import { useChat } from '../hooks/useChat';
 import { useAuth } from '../hooks/useAuth';
@@ -25,12 +24,12 @@ const getParticipantName = (participant) => {
   );
 };
 
-const swapSteps = ['PENDING', 'ACCEPTED', 'ACTIVE', 'COMPLETED'];
+const swapSteps = ['PENDING', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED'];
 
 const SwapDetail = () => {
   const { swapId } = useParams();
   const navigate = useNavigate();
-  const { swap, isLoading, acceptSwap, cancelSwap, confirmComplete, scheduleSession, startSwap } = useSwap(swapId);
+  const { swap, isLoading, acceptSwap, cancelSwap, markComplete, scheduleSession, startSwap } = useSwap(swapId);
   const { messages, sendMessage, deleteMessage, sendTyping, isTyping } = useChat(swapId);
   const { user: currentUser } = useAuth();
 
@@ -70,6 +69,7 @@ const SwapDetail = () => {
     if (swap.status === 'CANCELLED') return -1;
     return swapSteps.indexOf(swap.status.toUpperCase());
   }, [swap?.status]);
+  const swapSession = swap?.session || (Array.isArray(swap?.sessions) ? swap.sessions[0] : null);
 
   const handleSchedule = async () => {
     try {
@@ -107,7 +107,7 @@ const SwapDetail = () => {
 
   const handleConfirm = async () => {
     try {
-      await confirmComplete(swapId);
+      await markComplete(swapId);
       toast.success('Completion confirmed');
     } catch (error) {
       toast.error(error?.message || 'Unable to confirm completion');
@@ -196,12 +196,12 @@ const SwapDetail = () => {
            <section className="rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-xl shadow-black/10 backdrop-blur-xl flex flex-col">
              <p className="text-sm font-medium uppercase tracking-[0.24em] text-white/45 mb-4">First Session</p>
              <div className="flex-1 flex flex-col justify-center items-center text-center p-6 border border-white/5 bg-slate-950/30 rounded-2xl">
-               {swap.sessions && swap.sessions.length > 0 ? (
+               {swapSession ? (
                  <>
                    <CalendarClock className="h-8 w-8 text-cyan-300 mb-3" />
-                   <p className="text-white font-medium">{formatDateTime(swap.sessions[0].scheduledAt)}</p>
-                   {swap.sessions[0].meetingLink && (
-                     <a href={swap.sessions[0].meetingLink} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 transition rounded-full text-xs font-bold text-white">
+                   <p className="text-white font-medium">{formatDateTime(swapSession.scheduledAt)}</p>
+                   {(swapSession.meetingUrl || swapSession.meetingLink) && (
+                     <a href={swapSession.meetingUrl || swapSession.meetingLink} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 transition rounded-full text-xs font-bold text-white">
                         <Video className="h-3 w-3" /> Join Call
                      </a>
                    )}
@@ -233,17 +233,18 @@ const SwapDetail = () => {
                     <button onClick={handleCancel} className="w-full rounded-full border border-white/10 bg-white/5 py-3 text-sm font-semibold text-white/70 transition hover:bg-white/10">Cancel Swap</button>
                   </>
                 )}
-                {(swap.status === 'ACCEPTED' || swap.status === 'ACTIVE' || swap.status === 'IN_PROGRESS') && (
+                {swap.status === 'ACCEPTED' && (
                   <>
-                    {(!swap.sessions || swap.sessions.length === 0) && swap.status === 'ACCEPTED' && (
+                    {!swapSession && (
                       <>
                         <button onClick={handleSchedule} className="w-full rounded-full border border-indigo-400/30 bg-indigo-500/10 py-3 text-sm font-semibold text-indigo-300 transition hover:bg-indigo-500/20">Schedule Session</button>
                         <button onClick={async () => { try { await startSwap(swapId); toast.success('Swap started!'); } catch(e) { toast.error(e?.message||'Failed'); } }} className="w-full rounded-full border border-cyan-400/30 bg-cyan-500/10 py-3 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-500/20">Start Now</button>
                       </>
                     )}
-                    <button onClick={handleConfirm} className="w-full rounded-full border border-emerald-400/30 bg-emerald-500/10 py-3 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/20">Mark Completed</button>
-                    <button onClick={handleCancel} className="w-full rounded-full border border-white/10 bg-white/5 py-3 text-sm font-semibold text-white/70 transition hover:bg-white/10">Cancel Swap</button>
                   </>
+                )}
+                {swap.status === 'IN_PROGRESS' && (
+                  <button onClick={handleConfirm} className="w-full rounded-full border border-emerald-400/30 bg-emerald-500/10 py-3 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/20">Mark Completed</button>
                 )}
                 {swap.status === 'COMPLETED' && (
                   <button onClick={() => setIsReviewModalOpen(true)} className="w-full flex items-center justify-center gap-2 rounded-full border border-amber-400/30 bg-amber-500/10 py-3 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/20">
@@ -263,7 +264,7 @@ const SwapDetail = () => {
         subtitle="Keep the coordination in one place"
         messages={messages}
         onSend={(content, action) => {
-           if(action === 'DELETE') return deleteMessage?.(content).catch(err => toast.error('Failed to delete'));
+          if(action === 'DELETE') return deleteMessage?.(content).catch(() => toast.error('Failed to delete'));
            return sendMessage(content);
         }}
         onTyping={sendTyping}
@@ -282,7 +283,13 @@ const SwapDetail = () => {
 
             <div className="flex justify-center gap-2 mb-6">
               {[1, 2, 3, 4, 5].map(star => (
-                 <button key={star} onClick={() => setReviewRating(star)} className="p-1 transition-transform hover:scale-110">
+                 <button
+                   key={star}
+                   type="button"
+                   aria-label={`Rate ${star} star${star > 1 ? 's' : ''}`}
+                   onClick={() => setReviewRating(star)}
+                   className="p-1 transition-transform hover:scale-110"
+                 >
                    <Star className={`h-10 w-10 ${star <= reviewRating ? 'text-amber-400 fill-amber-400 drop-shadow-[0_0_12px_rgba(251,191,36,0.6)]' : 'text-slate-700 hover:text-slate-500'}`} />
                  </button>
               ))}

@@ -1,9 +1,5 @@
-const fs = require('fs');
-
 async function simulate() {
-  const baseUrl = 'http://localhost:3000/api';
-  const JS_SKILL_ID = 'fbf9c383-7637-4411-9014-261a06846e91';
-  const PY_SKILL_ID = '11e332c6-6ee5-46de-a9f2-0e33800017ea';
+  const baseUrl = process.env.API_BASE_URL || 'http://localhost:5001/api';
   
   const userA = { email: `alice_${Date.now()}@example.com`, pass: 'password123' };
   const userB = { email: `bob_${Date.now()}@example.com`, pass: 'password123' };
@@ -45,13 +41,12 @@ async function simulate() {
 
     console.log('[2/7] Adding Skills to Profiles...');
     // Alice offers JS, wants PY
-    await api('POST', '/users/me/skills', { skillId: JS_SKILL_ID, type: 'offer', proficiencyLevel: 'EXPERT' }, ctx.tokenA);
-    const addedWantA = await api('POST', '/users/me/skills', { skillId: PY_SKILL_ID, type: 'want', proficiencyLevel: 'BEGINNER' }, ctx.tokenA);
-    ctx.aliceOfferedCode = addedWantA.data.id;
+    await api('POST', '/users/me/skills', { name: 'JavaScript', type: 'offer', proficiencyLevel: 'EXPERT' }, ctx.tokenA);
+    await api('POST', '/users/me/skills', { name: 'Python', type: 'want', proficiencyLevel: 'BEGINNER' }, ctx.tokenA);
 
     // Bob offers PY, wants JS
-    await api('POST', '/users/me/skills', { skillId: PY_SKILL_ID, type: 'offer', proficiencyLevel: 'EXPERT' }, ctx.tokenB);
-    await api('POST', '/users/me/skills', { skillId: JS_SKILL_ID, type: 'want', proficiencyLevel: 'BEGINNER' }, ctx.tokenB);
+    await api('POST', '/users/me/skills', { name: 'Python', type: 'offer', proficiencyLevel: 'EXPERT' }, ctx.tokenB);
+    await api('POST', '/users/me/skills', { name: 'JavaScript', type: 'want', proficiencyLevel: 'BEGINNER' }, ctx.tokenB);
 
     // -------------------------------------------------------------
     // PHASE 2: Matching
@@ -67,10 +62,14 @@ async function simulate() {
     // Wait, createSwap needs specific UserSkill IDs. 
     // We need to fetch Alice's mapped UserSkill IDs.
     const profileA = await api('GET', '/users/me', null, ctx.tokenA);
-    const aliceOfferId = profileA.data.skills.find(s => s.type === 'offer').id;
+    const aliceOfferId = profileA.data.skills.find((s) => String(s.type).toLowerCase() === 'offer')?.id;
     
     const profileB = await api('GET', '/users/me', null, ctx.tokenB);
-    const bobOfferId = profileB.data.skills.find(s => s.type === 'offer').id;
+    const bobOfferId = profileB.data.skills.find((s) => String(s.type).toLowerCase() === 'offer')?.id;
+
+    if (!aliceOfferId || !bobOfferId) {
+      throw new Error('Unable to resolve offered skill IDs from user profiles');
+    }
 
     // -------------------------------------------------------------
     // PHASE 3: Swaps Create & Accept

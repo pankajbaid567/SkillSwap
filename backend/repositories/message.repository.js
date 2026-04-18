@@ -10,7 +10,12 @@ class MessageRepository {
       data,
       include: {
         sender: {
-          select: { id: true, displayName: true, avatarUrl: true },
+          select: {
+            id: true,
+            profile: {
+              select: { displayName: true, avatarUrl: true },
+            },
+          },
         },
       },
     });

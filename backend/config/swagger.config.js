@@ -10,7 +10,7 @@ const options = {
     },
     servers: [
       {
-        url: 'http://localhost:5000',
+        url: process.env.SWAGGER_SERVER_URL || `http://localhost:${process.env.PORT || 5001}`,
         description: 'Development server',
       },
     ],

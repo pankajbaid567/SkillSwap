@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
 import { Search, X, BarChart3, AlertCircle } from 'lucide-react';
 import MatchCard from '../components/MatchCard';
 import { useMatches } from '../hooks/useMatches';
-import { matchAPI } from '../services/api.service';
-import { useNavigate } from 'react-router-dom';
+import { ROUTES } from '../constants/routes';
+import { matchAPI, swapAPI, userAPI } from '../services/api.service';
 
 const strategyOptions = [
   { value: 'skill', label: 'Skill-Based' },
@@ -108,11 +109,190 @@ const ExplainModal = ({ matchId, onClose }) => {
   );
 };
 
+const CreateSwapModal = ({ match, onClose, onCreated }) => {
+  const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  const [offeredOptions, setOfferedOptions] = useState([]);
+  const [requestedOptions, setRequestedOptions] = useState([]);
+  const [offeredSkillId, setOfferedSkillId] = useState('');
+  const [requestedSkillId, setRequestedSkillId] = useState('');
+  const [terms, setTerms] = useState('');
+
+  const partnerUserId = match?.matchedUser?.id || match?.user?.id || null;
+  const matchId = match?.matchId || match?.id || null;
+
+  useEffect(() => {
+    if (!match) return;
+
+    let cancelled = false;
+
+    const loadProfiles = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        if (!partnerUserId) {
+          throw new Error('Unable to resolve the matched user for swap creation.');
+        }
+
+        const [me, partner] = await Promise.all([
+          userAPI.getProfile(),
+          userAPI.getPublicProfile(partnerUserId),
+        ]);
+
+        if (cancelled) return;
+
+        const myOfferSkills = (me?.skills || []).filter((s) => String(s.type).toLowerCase() === 'offer');
+        const partnerOfferSkills = (partner?.skills || []).filter((s) => String(s.type).toLowerCase() === 'offer');
+
+        setOfferedOptions(myOfferSkills);
+        setRequestedOptions(partnerOfferSkills);
+        setOfferedSkillId(myOfferSkills[0]?.id || '');
+        setRequestedSkillId(partnerOfferSkills[0]?.id || '');
+      } catch (err) {
+        if (!cancelled) {
+          setError(err?.message || 'Unable to load skills for swap creation.');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadProfiles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [match, partnerUserId]);
+
+  if (!match) return null;
+
+  const labelForSkill = (entry) => {
+    const skillName = entry?.skill?.name || entry?.name || 'Skill';
+    const level = entry?.proficiencyLevel || entry?.proficiency || null;
+    return level ? `${skillName} (${level})` : skillName;
+  };
+
+  const handleCreateSwap = async () => {
+    if (!matchId || !offeredSkillId || !requestedSkillId) {
+      toast.error('Please select both offered and requested skills.');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const swap = await swapAPI.createSwap({
+        matchId,
+        offeredSkillId,
+        requestedSkillId,
+        terms: terms.trim() || undefined,
+      });
+      onCreated?.(swap);
+    } catch (err) {
+      toast.error(err?.message || 'Unable to create swap request.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="w-full max-w-xl rounded-3xl border border-white/10 bg-[#0b1220] p-6 shadow-2xl relative">
+        <button onClick={onClose} className="absolute top-4 right-4 text-white/50 hover:text-white transition">
+          <X className="h-5 w-5" />
+        </button>
+
+        <h3 className="text-xl font-semibold text-white">Create Swap Request</h3>
+        <p className="mt-2 text-sm text-white/55">
+          Your match is accepted. Pick the skill you will offer and the one you want to learn.
+        </p>
+
+        {loading ? (
+          <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-5 text-sm text-white/55">
+            Loading skill options...
+          </div>
+        ) : error ? (
+          <div className="mt-6 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-5 text-sm text-rose-200">
+            {error}
+          </div>
+        ) : (
+          <div className="mt-6 space-y-4">
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-white/80">Skill You Offer</span>
+              <select
+                value={offeredSkillId}
+                onChange={(e) => setOfferedSkillId(e.target.value)}
+                className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/50"
+              >
+                <option value="">Select offered skill</option>
+                {offeredOptions.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {labelForSkill(entry)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-white/80">Skill You Request</span>
+              <select
+                value={requestedSkillId}
+                onChange={(e) => setRequestedSkillId(e.target.value)}
+                className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/50"
+              >
+                <option value="">Select requested skill</option>
+                {requestedOptions.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {labelForSkill(entry)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-white/80">Notes/Terms (optional)</span>
+              <textarea
+                value={terms}
+                onChange={(e) => setTerms(e.target.value)}
+                rows={3}
+                placeholder="Add a short plan or expectations for this swap..."
+                className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/50 resize-none"
+              />
+            </label>
+
+            <div className="pt-2 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-white/70 transition hover:bg-white/10"
+              >
+                Later
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateSwap}
+                disabled={isSubmitting}
+                className="rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:opacity-95 disabled:opacity-60"
+              >
+                {isSubmitting ? 'Creating...' : 'Create Swap'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const Matches = () => {
   const navigate = useNavigate();
   const [strategy, setStrategy] = useState('skill');
   const [query, setQuery] = useState('');
   const [explainingMatchId, setExplainingMatchId] = useState(null);
+  const [createSwapMatch, setCreateSwapMatch] = useState(null);
   const { matches, stats, isLoading, acceptMatch, declineMatch } = useMatches({ strategy });
 
   const filteredMatches = useMemo(() => {
@@ -123,14 +303,9 @@ const Matches = () => {
 
   const handleAccept = async (match) => {
     try {
-      const res = await acceptMatch(match.matchId || match.id);
-      toast.success('Match accepted! Starting a new swap...');
-      
-      if (res && res.swap && res.swap.id) {
-        navigate(`/swaps/${res.swap.id}`);
-      } else {
-        navigate('/dashboard');
-      }
+      await acceptMatch(match.matchId || match.id);
+      toast.success('Match accepted. Create a swap request to continue.');
+      setCreateSwapMatch(match);
     } catch (error) {
       toast.error(error?.message || 'Unable to accept this match');
     }
@@ -217,9 +392,9 @@ const Matches = () => {
           <div className="col-span-full rounded-[2rem] border border-dashed border-white/10 bg-white/5 p-8 text-center text-sm text-white/50">
             No matches found for the current strategy or filters.
           </div>
-        ) : filteredMatches.map((match, index) => (
+        ) : filteredMatches.map((match, idx) => (
           <MatchCard
-            key={match.matchId || match.id || `fallback-match-index-${index}`}
+            key={match.matchId || match.id || `match-${idx}`}
             match={match}
             onAccept={handleAccept}
             onDecline={handleDecline}
@@ -230,6 +405,19 @@ const Matches = () => {
 
       {/* Explain Modal */}
       <ExplainModal matchId={explainingMatchId} onClose={() => setExplainingMatchId(null)} />
+
+      {/* Explicit swap creation flow after match acceptance */}
+      <CreateSwapModal
+        match={createSwapMatch}
+        onClose={() => setCreateSwapMatch(null)}
+        onCreated={(swap) => {
+          setCreateSwapMatch(null);
+          toast.success('Swap request created successfully');
+          if (swap?.id) {
+            navigate(ROUTES.swapDetail(swap.id));
+          }
+        }}
+      />
     </div>
   );
 };

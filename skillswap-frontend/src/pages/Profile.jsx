@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Camera, MapPin, Save, Star, Search, Trash2, Calendar, Bell, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Camera, Save, Star, Search, Trash2, Calendar, Bell, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuthContext } from '../contexts/AuthContext';
 import { userAPI, reviewAPI } from '../services/api.service';
 import { formatDateTime } from '../utils/formatters';
@@ -30,8 +30,8 @@ const Profile = () => {
     enabled: !!current.id && activeTab === 'reviews',
   });
 
-  const reviews = reviewsQuery.data?.reviews || [];
-  const averageRating = reviewsQuery.data?.averageRating || current.rating || 0;
+  const reviews = reviewsQuery.data?.data || reviewsQuery.data?.reviews || [];
+  const averageRating = reviewsQuery.data?.avgRating || reviewsQuery.data?.averageRating || current.avgRating || 0;
 
   // Local State
   const [avatarPreview, setAvatarPreview] = useState(null);
@@ -299,7 +299,7 @@ const Profile = () => {
                  <div>
                    <p className="text-xs font-semibold text-white/50 mb-3 border-b border-white/5 pb-2">Skills I Offer</p>
                    <div className="flex flex-wrap gap-2">
-                     {current.skills?.filter(s => s.type === 'offer').map((s) => (
+                     {current.skills?.filter((s) => String(s.type).toLowerCase() === 'offer').map((s) => (
                        <div key={s.id || s.name} className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-3 py-1">
                          <span className="text-sm text-emerald-100">{s.skill?.name || s.name}</span>
                          <button onClick={() => handleRemoveSkill(s.id)} className="text-emerald-500 hover:text-emerald-300"><Trash2 className="h-3 w-3" /></button>
@@ -311,7 +311,7 @@ const Profile = () => {
                  <div>
                    <p className="text-xs font-semibold text-white/50 mb-3 border-b border-white/5 pb-2">Skills I Want</p>
                    <div className="flex flex-wrap gap-2">
-                     {current.skills?.filter(s => s.type === 'want').map((s) => (
+                     {current.skills?.filter((s) => String(s.type).toLowerCase() === 'want').map((s) => (
                        <div key={s.id || s.name} className="flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 rounded-full px-3 py-1">
                          <span className="text-sm text-indigo-100">{s.skill?.name || s.name}</span>
                          <button onClick={() => handleRemoveSkill(s.id)} className="text-indigo-500 hover:text-indigo-300"><Trash2 className="h-3 w-3" /></button>
@@ -383,10 +383,10 @@ const Profile = () => {
                      <div className="flex justify-between items-start mb-4">
                        <div className="flex gap-3 items-center">
                          <div className="h-10 w-10 bg-cyan-900 rounded-full flex items-center justify-center text-cyan-200 overflow-hidden">
-                            {review.reviewer?.avatarUrl ? <img src={review.reviewer.avatarUrl} alt="" className="h-full w-full object-cover" /> : 'U'}
+                            {review.reviewer?.profile?.avatarUrl ? <img src={review.reviewer.profile.avatarUrl} alt="" className="h-full w-full object-cover" /> : 'U'}
                          </div>
                          <div>
-                           <p className="text-sm font-semibold text-white/80">{review.reviewer?.displayName || 'Anonymous User'}</p>
+                           <p className="text-sm font-semibold text-white/80">{review.reviewer?.profile?.displayName || review.reviewer?.email || 'Anonymous User'}</p>
                            <p className="text-xs text-white/40 mt-0.5">{formatDateTime(review.createdAt)}</p>
                          </div>
                        </div>

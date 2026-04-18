@@ -22,6 +22,8 @@ export const useNotifications = (params = {}) => {
 
   useEffect(() => {
     if (!socket || !isConnected) return;
+    const currentEvent = SOCKET_EVENTS.notificationCreated;
+    const legacyEvent = 'notification:created';
 
     const handleNewNotification = (notification) => {
       // Optimistically update caches without a full refetch if you want,
@@ -32,16 +34,29 @@ export const useNotifications = (params = {}) => {
 
       queryClient.setQueryData(['notifications', params], (old) => {
         if (!old) return old;
-        const notificationsList = old.notifications || old;
+        const notificationsList = Array.isArray(old)
+          ? old
+          : (old.notifications || old.items || []);
         const updatedList = [notification, ...notificationsList.filter(n => n.id !== notification.id)];
-        return Array.isArray(old) ? updatedList : { ...old, notifications: updatedList };
+        if (Array.isArray(old)) return updatedList;
+        return {
+          ...old,
+          notifications: updatedList,
+          items: updatedList,
+        };
       });
     };
 
-    socket.on(SOCKET_EVENTS.notificationCreated, handleNewNotification);
+    socket.on(currentEvent, handleNewNotification);
+    if (legacyEvent !== currentEvent) {
+      socket.on(legacyEvent, handleNewNotification);
+    }
 
     return () => {
-      socket.off(SOCKET_EVENTS.notificationCreated, handleNewNotification);
+      socket.off(currentEvent, handleNewNotification);
+      if (legacyEvent !== currentEvent) {
+        socket.off(legacyEvent, handleNewNotification);
+      }
     };
   }, [socket, isConnected, queryClient, params]);
 
@@ -66,7 +81,7 @@ export const useNotifications = (params = {}) => {
   });
 
   return {
-    notifications: notificationsQuery.data?.notifications || notificationsQuery.data || [],
+    notifications: notificationsQuery.data?.notifications || notificationsQuery.data?.items || notificationsQuery.data || [],
     pagination: notificationsQuery.data?.pagination || null,
     unreadCount: unreadCountQuery.data?.count || 0,
     isLoading: notificationsQuery.isLoading || unreadCountQuery.isLoading,

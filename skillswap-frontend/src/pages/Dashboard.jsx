@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, Bell, Calendar, Globe2, Sparkles, Star, Users, Video, Workflow } from 'lucide-react';
+import { ArrowRight, Calendar, Globe2, Sparkles, Star, Users, Video, Workflow } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useMatches } from '../hooks/useMatches';
 import { useSwap } from '../hooks/useSwap';
@@ -26,11 +26,29 @@ const Dashboard = () => {
   const { user } = useAuth();
   const { matches, stats: matchStats, isLoading: matchesLoading } = useMatches({ limit: 4 });
   const { activeSwaps, swapStats, upcomingSessions, isLoading: swapsLoading } = useSwap();
+  const pendingRequests = matchStats?.pendingMatches
+    ?? Math.max(
+      (matchStats?.totalMatches ?? matches.length)
+        - (matchStats?.acceptedMatches ?? 0)
+        - (matchStats?.declinedMatches ?? 0),
+      0,
+    );
+
+  const resolveSessionPartner = (session) => {
+    const fallbackPartner = session.partner || null;
+    const initiator = session?.swap?.initiator;
+    const receiver = session?.swap?.receiver;
+
+    if (!user?.id) return fallbackPartner || initiator || receiver;
+    if (initiator?.id === user.id) return receiver || fallbackPartner;
+    if (receiver?.id === user.id) return initiator || fallbackPartner;
+    return fallbackPartner || initiator || receiver;
+  };
 
   const stats = [
     { label: 'Active Swaps', value: activeSwaps.length, note: 'In progress exchanges', icon: 'workflow', color: 'from-cyan-500/20 to-transparent' },
-    { label: 'Pending Requests', value: matchStats?.pendingMatches ?? matches.length, note: 'Awaiting your review', icon: 'users', color: 'from-indigo-500/20 to-transparent' },
-    { label: 'Completed', value: swapStats?.completedSwaps ?? 0, note: 'Total finished swaps', icon: 'sparkles', color: 'from-emerald-500/20 to-transparent' },
+    { label: 'Pending Requests', value: pendingRequests, note: 'Awaiting your review', icon: 'users', color: 'from-indigo-500/20 to-transparent' },
+    { label: 'Completed', value: swapStats?.completed ?? swapStats?.completedSwaps ?? 0, note: 'Total finished swaps', icon: 'sparkles', color: 'from-emerald-500/20 to-transparent' },
     { label: 'Avg Rating', value: user?.avgRating != null ? Number(user.avgRating).toFixed(1) : '—', note: 'Based on feedback', icon: 'star', color: 'from-amber-500/20 to-transparent' },
   ];
 
@@ -72,21 +90,24 @@ const Dashboard = () => {
                 <Calendar className="h-6 w-6 text-white/20 mb-2" />
                 No sessions scheduled for the next 7 days.
               </div>
-            ) : upcomingSessions.slice(0, 3).map((session) => (
+            ) : upcomingSessions.slice(0, 3).map((session) => {
+              const partner = resolveSessionPartner(session);
+              return (
               <div key={session.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-4">
                 <div>
-                  <p className="text-sm font-medium text-white">{session.partner?.displayName || session.partner?.name || 'Partner'}</p>
+                  <p className="text-sm font-medium text-white">{partner?.profile?.displayName || partner?.displayName || partner?.name || partner?.email || 'Partner'}</p>
                   <p className="mt-1 text-xs text-white/55">{formatDateTime(session.scheduledAt)}</p>
                 </div>
-                {session.meetingLink ? (
-                  <a href={session.meetingLink} target="_blank" rel="noreferrer" className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-300 transition hover:bg-cyan-400/20">
+                {session.meetingUrl || session.meetingLink ? (
+                  <a href={session.meetingUrl || session.meetingLink} target="_blank" rel="noreferrer" className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-300 transition hover:bg-cyan-400/20">
                     <Video className="h-4 w-4" />
                   </a>
                 ) : (
                   <span className="text-xs text-white/30">No link</span>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
@@ -122,7 +143,7 @@ const Dashboard = () => {
               <div className="rounded-3xl border border-white/10 bg-slate-950/40 p-6 text-sm text-white/50">Loading requests...</div>
             ) : matches.slice(0, 3).length === 0 ? (
               <div className="rounded-3xl border border-dashed border-white/10 bg-slate-950/40 p-6 text-sm text-white/50">No pending matches. Discovery awaits!</div>
-            ) : matches.slice(0, 3).map((match) => <MatchCard key={match.matchId || match.id || Math.random()} match={match} compact />)}
+            ) : matches.slice(0, 3).map((match, idx) => <MatchCard key={match.matchId || match.id || `match-${idx}`} match={match} compact />)}
           </div>
         </div>
 

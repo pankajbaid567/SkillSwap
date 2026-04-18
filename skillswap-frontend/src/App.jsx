@@ -11,12 +11,14 @@ import Register from './pages/Register';
 import SwapDetail from './pages/SwapDetail';
 import Swaps from './pages/Swaps';
 import PublicProfile from './pages/PublicProfile';
+import ResetPassword from './pages/ResetPassword';
 
 const App = () => (
   <Routes>
     <Route path={ROUTES.login} element={<Login />} />
     <Route path={ROUTES.register} element={<Register />} />
     <Route path={ROUTES.forgotPassword} element={<ForgotPassword />} />
+    <Route path={ROUTES.resetPassword} element={<ResetPassword />} />
 
     <Route element={<ProtectedRoute />}>
       <Route element={<AppShell />}>

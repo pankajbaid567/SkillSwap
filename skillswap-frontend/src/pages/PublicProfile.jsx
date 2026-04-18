@@ -20,8 +20,9 @@ const PublicProfile = () => {
   });
 
   const profile = profileQuery.data;
-  const reviews = reviewsQuery.data?.reviews || [];
-  const averageRating = reviewsQuery.data?.averageRating || profile?.rating || 0;
+  const publicProfile = profile?.profile || profile || {};
+  const reviews = reviewsQuery.data?.data || reviewsQuery.data?.reviews || [];
+  const averageRating = reviewsQuery.data?.avgRating || reviewsQuery.data?.averageRating || profile?.avgRating || 0;
   const totalSwaps = profile?.totalSwaps || 0;
 
   if (profileQuery.isLoading) {
@@ -49,16 +50,16 @@ const PublicProfile = () => {
         <div className="relative flex flex-col md:flex-row items-center gap-8 mt-12">
           {/* Avatar */}
           <div className="h-32 w-32 shrink-0 rounded-full border-4 border-slate-900 bg-slate-800 flex items-center justify-center shadow-xl shadow-cyan-500/20 overflow-hidden relative">
-            {profile.avatarUrl ? (
-              <img src={profile.avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
+            {publicProfile.avatarUrl ? (
+              <img src={publicProfile.avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
             ) : (
               <User className="h-12 w-12 text-cyan-400/50" />
             )}
           </div>
           
           <div className="flex-1 text-center md:text-left">
-            <h1 className="text-3xl font-bold text-white mb-2">{profile.displayName || profile.name || 'Anonymous User'}</h1>
-            <p className="text-white/60 mb-6 max-w-2xl">{profile.bio || 'This user has not provided a bio yet.'}</p>
+            <h1 className="text-3xl font-bold text-white mb-2">{publicProfile.displayName || profile?.name || 'Anonymous User'}</h1>
+            <p className="text-white/60 mb-6 max-w-2xl">{publicProfile.bio || 'This user has not provided a bio yet.'}</p>
             
             <div className="flex flex-wrap justify-center md:justify-start gap-4">
                <div className="flex items-center gap-2 bg-slate-950/40 rounded-full px-4 py-2 border border-white/10">
@@ -80,12 +81,12 @@ const PublicProfile = () => {
       <section className="rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-xl shadow-black/10 backdrop-blur-xl">
         <p className="text-sm font-medium uppercase tracking-[0.2em] text-white/45 mb-6">Skills Offered</p>
         
-        {profile.skills && profile.skills.filter(s => s.type === 'OFFER').length > 0 ? (
+        {profile.skills && profile.skills.filter((s) => String(s.type).toLowerCase() === 'offer').length > 0 ? (
           <div className="flex flex-wrap gap-2">
-            {profile.skills.filter(s => s.type === 'OFFER').map((skill, idx) => (
+            {profile.skills.filter((s) => String(s.type).toLowerCase() === 'offer').map((skill, idx) => (
               <div key={idx} className="bg-cyan-400/10 border border-cyan-400/20 rounded-xl px-4 py-3 flex flex-col">
-                <span className="text-cyan-300 font-semibold">{skill.name}</span>
-                <span className="text-xs text-white/40 mt-1 capitalize">{skill.proficiency || 'Intermediate'}</span>
+                <span className="text-cyan-300 font-semibold">{skill.skill?.name || skill.name}</span>
+                <span className="text-xs text-white/40 mt-1 capitalize">{skill.proficiencyLevel || skill.proficiency || 'Intermediate'}</span>
               </div>
             ))}
           </div>
@@ -107,14 +108,14 @@ const PublicProfile = () => {
                 <div className="flex items-center justify-between mb-4">
                    <div className="flex items-center gap-3">
                      <div className="h-8 w-8 bg-slate-800 rounded-full flex items-center justify-center overflow-hidden">
-                       {review.reviewer?.avatarUrl ? (
-                         <img src={review.reviewer.avatarUrl} alt="" className="h-full w-full object-cover" />
+                       {review.reviewer?.profile?.avatarUrl ? (
+                         <img src={review.reviewer.profile.avatarUrl} alt="" className="h-full w-full object-cover" />
                        ) : (
-                         <span className="text-xs text-white/50">{review.reviewer?.displayName?.charAt(0) || 'U'}</span>
+                         <span className="text-xs text-white/50">{review.reviewer?.profile?.displayName?.charAt(0) || review.reviewer?.email?.charAt(0) || 'U'}</span>
                        )}
                      </div>
                      <div>
-                       <p className="text-sm font-semibold text-white/90">{review.reviewer?.displayName || 'Unknown'}</p>
+                       <p className="text-sm font-semibold text-white/90">{review.reviewer?.profile?.displayName || review.reviewer?.email || 'Unknown'}</p>
                        <p className="text-[10px] text-white/40 uppercase tracking-wider">{formatDateTime(review.createdAt)}</p>
                      </div>
                    </div>

@@ -9,7 +9,7 @@ SkillSwap aims to democratize learning by minimizing the friction of acquiring n
 
 ## 🔗 Quick Links
 - **Architecture Diagram**: [View Architecture Overview](https://app.eraser.io/workspace/skillswap-arch) *(Replace with actual diagram link)*
-- **API Documentation**: Accessible locally at [`/api/docs`](http://localhost:5000/api/docs) or via production at [`https://api.skillswap.ai/api/docs`](https://api.skillswap.ai/api/docs) once deployed.
+- **API Documentation**: Accessible locally at [`/api/docs`](http://localhost:5001/api/docs) or via production at [`https://api.skillswap.ai/api/docs`](https://api.skillswap.ai/api/docs) once deployed.
 
 ## ✨ Setup Instructions
 
