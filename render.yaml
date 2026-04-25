@@ -1,7 +1,7 @@
 # Render Blueprint: https://render.com/docs/blueprint-spec
 #
 # First deploy: fill dashboard prompts for `sync: false` vars. Do not commit secrets.
-# - DATABASE_URL: Neon (or any Postgres) connection string; run `npx prisma migrate deploy` is handled by preDeploy.
+# - DATABASE_URL: Neon connection string (required at build time for migrate on free tier; no preDeploy on free).
 # - CORS_ORIGIN: your static site origin, e.g. https://skillswap-web.onrender.com
 # - VITE_API_URL: public API base with /api, e.g. https://skillswap-api.onrender.com/api
 # Optional: add REDIS_URL (Upstash) in the API service in the Render dashboard for Redis cache + Socket.io adapter.
@@ -14,8 +14,7 @@ services:
     region: oregon
     plan: free
     rootDir: backend
-    buildCommand: npm install --include=dev && npx prisma generate
-    preDeployCommand: npx prisma migrate deploy
+    buildCommand: npm install --include=dev && npx prisma generate && npx prisma migrate deploy
     startCommand: npm start
     healthCheckPath: /health
     buildFilter:
