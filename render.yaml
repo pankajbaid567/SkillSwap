@@ -1,7 +1,10 @@
 # Render Blueprint: https://render.com/docs/blueprint-spec
 #
 # First deploy: fill dashboard prompts for `sync: false` vars. Do not commit secrets.
-# - DATABASE_URL: Neon connection string (required at build time for migrate on free tier; no preDeploy on free).
+# - DATABASE_URL: Must be a Postgres URL for Prisma, starting with postgresql:// or postgres://
+#   (copy from Neon: Dashboard -> your DB -> Connect -> "Prisma" or "URI", not the HTTPS console URL).
+#   Example shape: postgresql://USER:PASS@ep-....neon.tech:5432/neondb?sslmode=require
+#   If build fails P1012, the value in Render is wrong, missing protocol, or truncated.
 # - CORS_ORIGIN: your static site origin, e.g. https://skillswap-web.onrender.com
 # - VITE_API_URL: public API base with /api, e.g. https://skillswap-api.onrender.com/api
 # - REDIS_URL: Upstash (optional). Omit in dashboard or leave for later if you add it to the API service by hand.
