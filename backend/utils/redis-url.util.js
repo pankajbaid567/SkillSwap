@@ -19,6 +19,8 @@ function resolveRedisUrl(url) {
 /** @see https://github.com/luin/ioredis#special-note-aws-elasticache-and-upstash */
 const IOREDIS_OPTIONS = {
   maxRetriesPerRequest: null,
+  // Upstash / remote Redis: avoid extra READY round-trips
+  enableReadyCheck: false,
   retryStrategy(times) {
     return Math.min(times * 200, 3000);
   },

@@ -1,6 +1,7 @@
 const { Server } = require('socket.io');
 const { createAdapter } = require('@socket.io/redis-adapter');
 const Redis = require('ioredis');
+const appRedis = require('../cache/redis.client');
 const { resolveRedisUrl, IOREDIS_OPTIONS } = require('../utils/redis-url.util');
 const { verifyToken } = require('../utils/jwt.util');
 const chatService = require('../services/chat.service');
@@ -44,25 +45,13 @@ const PRESENCE_KEY_PREFIX = 'skillswap:online:';
 /**
  * Shared Redis client for presence operations.
  * Reuses a long-lived connection instead of creating one per call.
- * @type {import('ioredis').Redis|null}
- */
-let presenceRedisClient = null;
-
-/**
- * Returns a shared, long-lived Redis client for presence ops.
+ * Reuse the app cache Redis client so we do not open a 4th connection
+ * (Upstash free tier limits can cause ECONNRESET + MaxRetriesPerRequest with many clients).
  * @returns {import('ioredis').Redis|null}
  */
 function getPresenceRedisClient() {
   if (!process.env.REDIS_URL) return null;
-  if (presenceRedisClient) return presenceRedisClient;
-
-  const url = resolveRedisUrl(process.env.REDIS_URL);
-  presenceRedisClient = new Redis(url, IOREDIS_OPTIONS);
-  presenceRedisClient.on('error', (err) => {
-    logger.warn('Presence Redis client error', { error: err.message });
-  });
-
-  return presenceRedisClient;
+  return appRedis.getIoredis();
 }
 
 /**
@@ -95,8 +84,9 @@ const setupSocket = (httpServer) => {
   if (process.env.REDIS_URL) {
     try {
       const url = resolveRedisUrl(process.env.REDIS_URL);
+      // Do not use duplicate() — it can keep default maxRetriesPerRequest and break on Upstash.
       const pubClient = new Redis(url, IOREDIS_OPTIONS);
-      const subClient = pubClient.duplicate();
+      const subClient = new Redis(url, IOREDIS_OPTIONS);
       for (const c of [pubClient, subClient]) {
         c.on('error', (err) => {
           logger.warn('Socket.io Redis adapter client error', { error: err.message });
@@ -328,10 +318,7 @@ async function isUserOnline(userId) {
  * Call during application shutdown.
  */
 async function closePresenceClient() {
-  if (presenceRedisClient) {
-    await presenceRedisClient.quit();
-    presenceRedisClient = null;
-  }
+  // Presence uses appRedis.getIoredis(); quit is handled in redisClient.disconnect()
 }
 
 module.exports = {

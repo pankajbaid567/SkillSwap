@@ -61,6 +61,14 @@ class RedisClient {
   }
 
   /**
+   * The underlying ioredis client (for sharing one TCP connection: cache + presence).
+   * @returns {import('ioredis').Redis|null}
+   */
+  getIoredis() {
+    return this.#usingRedis ? this.#client : null;
+  }
+
+  /**
    * Retrieve a cached value. Returns parsed JSON or null.
    * Logs cache misses with structured context.
    * @param {string} key
