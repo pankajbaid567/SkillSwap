@@ -1,6 +1,7 @@
 const { Server } = require('socket.io');
 const { createAdapter } = require('@socket.io/redis-adapter');
 const Redis = require('ioredis');
+const { resolveRedisUrl, IOREDIS_OPTIONS } = require('../utils/redis-url.util');
 const { verifyToken } = require('../utils/jwt.util');
 const chatService = require('../services/chat.service');
 const prisma = require('../config/db.config');
@@ -55,7 +56,8 @@ function getPresenceRedisClient() {
   if (!process.env.REDIS_URL) return null;
   if (presenceRedisClient) return presenceRedisClient;
 
-  presenceRedisClient = new Redis(process.env.REDIS_URL);
+  const url = resolveRedisUrl(process.env.REDIS_URL);
+  presenceRedisClient = new Redis(url, IOREDIS_OPTIONS);
   presenceRedisClient.on('error', (err) => {
     logger.warn('Presence Redis client error', { error: err.message });
   });
@@ -92,8 +94,14 @@ const setupSocket = (httpServer) => {
   // ──────────────────────────────────────────────────
   if (process.env.REDIS_URL) {
     try {
-      const pubClient = new Redis(process.env.REDIS_URL);
+      const url = resolveRedisUrl(process.env.REDIS_URL);
+      const pubClient = new Redis(url, IOREDIS_OPTIONS);
       const subClient = pubClient.duplicate();
+      for (const c of [pubClient, subClient]) {
+        c.on('error', (err) => {
+          logger.warn('Socket.io Redis adapter client error', { error: err.message });
+        });
+      }
       io.adapter(createAdapter(pubClient, subClient));
       logger.info('Socket.io: Redis adapter attached (horizontal scaling enabled)');
     } catch (err) {

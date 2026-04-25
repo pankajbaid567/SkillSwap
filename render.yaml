@@ -7,7 +7,7 @@
 #   If build fails P1012, the value in Render is wrong, missing protocol, or truncated.
 # - CORS_ORIGIN: your static site origin, e.g. https://skillswap-web.onrender.com
 # - VITE_API_URL: public API base with /api, e.g. https://skillswap-api.onrender.com/api
-# - REDIS_URL: Upstash (optional). Omit in dashboard or leave for later if you add it to the API service by hand.
+# - REDIS_URL: Upstash — use the URL starting with rediss:// (TLS), or redis:// (app upgrades Upstash to rediss://).
 # If Neon/Upstash strings were ever pasted in chat, rotate credentials in those providers.
 
 services:
@@ -40,7 +40,8 @@ services:
     runtime: static
     buildCommand: npm install && npm run build
     rootDir: skillswap-frontend
-    staticPublishPath: skillswap-frontend/dist
+    # Relative to rootDir (see Render static + monorepo); skillswap-frontend/dist breaks publish path.
+    staticPublishPath: dist
     buildFilter:
       paths:
         - skillswap-frontend/**

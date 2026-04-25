@@ -1,5 +1,6 @@
 const Redis = require('ioredis');
 const logger = require('../utils/logger');
+const { resolveRedisUrl, IOREDIS_OPTIONS } = require('../utils/redis-url.util');
 
 /**
  * Key naming convention: skillswap:matches:{userId}:{strategy}
@@ -28,15 +29,11 @@ class RedisClient {
   #misses = 0;
 
   constructor() {
-    const redisUrl = process.env.REDIS_URL;
+    const redisUrl = resolveRedisUrl(process.env.REDIS_URL);
 
     if (redisUrl) {
       this.#client = new Redis(redisUrl, {
-        maxRetriesPerRequest: 3,
-        retryStrategy(times) {
-          const delay = Math.min(times * 200, 2000);
-          return delay;
-        },
+        ...IOREDIS_OPTIONS,
         lazyConnect: false,
       });
 
