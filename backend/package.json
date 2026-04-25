@@ -19,7 +19,7 @@
   "license": "ISC",
   "type": "commonjs",
   "engines": {
-    "node": ">=18.0.0"
+    "node": "20.x"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^5.22.0",

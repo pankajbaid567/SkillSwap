@@ -7,7 +7,8 @@
 #   If build fails P1012, the value in Render is wrong, missing protocol, or truncated.
 # - CORS_ORIGIN: your static site origin, e.g. https://skillswap-web.onrender.com
 # - VITE_API_URL: public API base with /api, e.g. https://skillswap-api.onrender.com/api
-# - REDIS_URL: Upstash — use the URL starting with rediss:// (TLS), or redis:// (app upgrades Upstash to rediss://).
+# - REDIS_URL: Upstash — prefer rediss:// from the console. If Redis keeps crashing, remove REDIS_URL
+#   so the API runs (in-memory cache; Socket.io in-process only) until you fix the URL.
 # If Neon/Upstash strings were ever pasted in chat, rotate credentials in those providers.
 
 services:
