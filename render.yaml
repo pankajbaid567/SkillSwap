@@ -38,10 +38,11 @@ services:
   - type: web
     name: skillswap-web
     runtime: static
-    # No rootDir here: use repo-root paths so `staticPublishPath` matches the built `dist` reliably.
-    # (With rootDir + `dist`, some deploys still resolve publish as `skillswap-frontend/dist` and fail.)
-    buildCommand: cd skillswap-frontend && npm install && npm run build
-    staticPublishPath: skillswap-frontend/dist
+    # Monorepo: rootDir = app folder; build/publish are relative to that (Render docs: root-relative).
+    # Publish must be `dist`, not `skillswap-frontend/dist` (avoids double path).
+    rootDir: skillswap-frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
     buildFilter:
       paths:
         - skillswap-frontend/**
