@@ -98,13 +98,15 @@ const unwrap = (response) => response?.data?.data ?? response?.data ?? null;
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
-  withCredentials: true,
+  // We use Bearer tokens (not cookies), so credentials are unnecessary and can
+  // trigger CORS issues in local development.
+  withCredentials: false,
 });
 
 const refreshClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
-  withCredentials: true,
+  withCredentials: false,
 });
 
 api.interceptors.request.use((config) => {
@@ -236,7 +238,8 @@ export const matchAPI = {
   getMatchById: async (matchId) => request({ method: 'get', url: `/matches/${matchId}` }),
   acceptMatch: async (matchId) => request({ method: 'post', url: `/matches/${matchId}/accept` }),
   declineMatch: async (matchId) => request({ method: 'post', url: `/matches/${matchId}/decline` }),
-  explainMatch: async (matchId) => request({ method: 'get', url: `/matches/${matchId}/explain` }),
+  explainMatch: async (matchId, params = {}) =>
+    request({ method: 'get', url: `/matches/${matchId}/explain`, params }),
   getStats: async () => request({ method: 'get', url: '/matches/stats' }),
 };
 

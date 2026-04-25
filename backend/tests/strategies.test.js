@@ -30,10 +30,27 @@ describe('Matching Strategies', () => {
       const invalidCandidate = generateMockUser('cand2', []); // Empty skills
 
       const pool = [validCandidate, invalidCandidate];
-      
+
       const filtered = skillStrategy.findCandidates('seeker', pool);
       expect(filtered.length).toBe(1);
       expect(filtered[0].id).toBe('cand1');
+    });
+
+    it('should prefer complementary want/offer with seeker when provided', () => {
+      const seeker = generateMockUser('seeker', [
+        { skillId: 'a', type: 'want' },
+        { skillId: 'b', type: 'offer' },
+      ]);
+      const good = generateMockUser('good', [
+        { skillId: 'a', type: 'offer' },
+      ]);
+      const irrelevant = generateMockUser('irrelevant', [
+        { skillId: 'x', type: 'offer' },
+        { skillId: 'y', type: 'want' },
+      ]);
+      const pool = [good, irrelevant];
+      const filtered = skillStrategy.findCandidates('seeker', pool, seeker);
+      expect(filtered.map((c) => c.id)).toContain('good');
     });
 
     it('should calculate skill overlap and proficiency bonus', () => {

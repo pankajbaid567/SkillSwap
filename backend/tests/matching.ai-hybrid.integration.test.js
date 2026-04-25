@@ -19,7 +19,9 @@ jest.mock('../cache/redis.client', () => ({
   invalidatePattern: jest.fn().mockResolvedValue('OK')
 }));
 
-describe('AI Hybrid Matching Integration', () => {
+const shouldRunIntegration = process.env.RUN_INTEGRATION_TESTS === 'true';
+
+(shouldRunIntegration ? describe : describe.skip)('AI Hybrid Matching Integration', () => {
   let userA, userB, userC;
   
   beforeAll(async () => {

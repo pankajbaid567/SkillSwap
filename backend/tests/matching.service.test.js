@@ -34,6 +34,7 @@ describe('MatchingService', () => {
       findWithSkillsAndAvailability: jest.fn(),
     };
     mockMatchRepo = {
+      findMatchesByUser: jest.fn().mockResolvedValue({ matches: [], total: 0 }),
       getActiveCandidatePool: jest.fn().mockResolvedValue([]),
       findExistingMatch: jest.fn().mockResolvedValue(null),
       createMatch: jest.fn().mockResolvedValue({ id: 'm1' }),

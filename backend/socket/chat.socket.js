@@ -20,11 +20,14 @@ const socketCorsOriginValidator = (origin, callback) => {
   // Allow tools/clients without Origin header
   if (!origin) return callback(null, true);
 
+  // Always allow local development origins (any localhost / 127.0.0.1 port).
+  if (isLocalDevOrigin(origin)) return callback(null, true);
+
   if (configuredOrigins.length > 0) {
     return callback(null, configuredOrigins.includes(origin));
   }
 
-  return callback(null, isLocalDevOrigin(origin));
+  return callback(null, false);
 };
 
 /**

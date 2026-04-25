@@ -1,7 +1,49 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+#
+# First deploy: fill dashboard prompts for `sync: false` vars. Do not commit secrets.
+# - DATABASE_URL: Neon (or any Postgres) connection string; run `npx prisma migrate deploy` is handled by preDeploy.
+# - CORS_ORIGIN: your static site origin, e.g. https://skillswap-web.onrender.com
+# - VITE_API_URL: public API base with /api, e.g. https://skillswap-api.onrender.com/api
+# Optional: add REDIS_URL (Upstash) in the API service in the Render dashboard for Redis cache + Socket.io adapter.
+# If Neon/Upstash strings were ever pasted in chat, rotate credentials in those providers.
+
 services:
   - type: web
     name: skillswap-api
-    env: node
+    runtime: node
+    region: oregon
+    plan: free
     rootDir: backend
-    buildCommand: npm install && npx prisma migrate deploy
-    startCommand: node server.js
+    buildCommand: npm install --include=dev && npx prisma generate
+    preDeployCommand: npx prisma migrate deploy
+    startCommand: npm start
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - backend/**
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+
+  - type: web
+    name: skillswap-web
+    runtime: static
+    buildCommand: npm install && npm run build
+    rootDir: skillswap-frontend
+    staticPublishPath: skillswap-frontend/dist
+    buildFilter:
+      paths:
+        - skillswap-frontend/**
+    envVars:
+      - key: VITE_API_URL
+        sync: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

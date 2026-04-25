@@ -1,4 +1,9 @@
 const prisma = require('../config/db.config');
+const cache = require('../cache/redis.client');
+
+/** Swap outcomes that no longer need an exclusive lock on a match pair. */
+const TERMINAL_SWAP_STATUSES = new Set(['COMPLETED', 'CANCELLED', 'EXPIRED']);
+const MATCHES_CACHE_PREFIX = 'skillswap:matches:v2';
 
 /**
  * Encapsulates database queries for the Match model.
@@ -110,6 +115,7 @@ class MatchRepository {
               profile: {
                 select: {
                   displayName: true,
+                  bio: true,
                   avatarUrl: true,
                   location: true,
                 },
@@ -130,6 +136,7 @@ class MatchRepository {
               profile: {
                 select: {
                   displayName: true,
+                  bio: true,
                   avatarUrl: true,
                   location: true,
                 },
@@ -155,14 +162,15 @@ class MatchRepository {
   }
 
   /**
-   * Check if an active match already exists between two users.
-   * Checks both directions (userId1/userId2 are interchangeable).
+   * Returns a match that still blocks a *new* pending suggestion, or null if the pair can get a new match.
+   * If the pair is only tied by a stale "accepted" match whose swap already ended, that row is
+   * closed (fulfilled) and null is returned so a fresh pending match can be created.
    * @param {string} userIdA
    * @param {string} userIdB
    * @returns {Promise<Object|null>}
    */
   async findExistingMatch(userIdA, userIdB) {
-    return await prisma.match.findFirst({
+    const m = await prisma.match.findFirst({
       where: {
         isActive: true,
         status: { in: ['pending', 'accepted'] },
@@ -170,6 +178,59 @@ class MatchRepository {
           { userId1: userIdA, userId2: userIdB },
           { userId1: userIdB, userId2: userIdA },
         ],
+      },
+    });
+    if (!m) {
+      return null;
+    }
+    if (m.status === 'pending') {
+      return m;
+    }
+    // accepted — block only if there is an open (non-terminal) swap, or no swap yet
+    const latest = await prisma.swap.findFirst({
+      where: { matchId: m.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!latest) {
+      return m;
+    }
+    if (TERMINAL_SWAP_STATUSES.has(latest.status)) {
+      try {
+        await this.markMatchFulfilled(m.id);
+        await this.#bustMatchCacheForUserPair(m.userId1, m.userId2);
+      } catch (e) {
+        // If already updated elsewhere, still allow a new match row
+      }
+      return null;
+    }
+    return m;
+  }
+
+  /**
+   * @private
+   * @param {string} a
+   * @param {string} b
+   */
+  async #bustMatchCacheForUserPair(a, b) {
+    try {
+      await cache.invalidatePattern(`${MATCHES_CACHE_PREFIX}:${a}:*`);
+      await cache.invalidatePattern(`${MATCHES_CACHE_PREFIX}:${b}:*`);
+    } catch (e) {
+      // no-op: cache is best-effort
+    }
+  }
+
+  /**
+   * Closes a match so both users can appear in the candidate pool again
+   * (e.g. after a swap is completed, cancelled, or a pending swap expires).
+   * @param {string} matchId
+   */
+  async markMatchFulfilled(matchId) {
+    return await prisma.match.update({
+      where: { id: matchId },
+      data: {
+        status: 'fulfilled',
+        isActive: false,
       },
     });
   }
@@ -251,8 +312,64 @@ class MatchRepository {
   }
 
   /**
+   * @see getActiveCandidatePool — partners who still "lock" the pair in matching.
+   * @param {string} userId
+   * @returns {Promise<Set<string>>}
+   */
+  async getPartnerUserIdsWhoBlockNewSuggestions(userId) {
+    const blocked = new Set([userId]);
+
+    const pending = await prisma.match.findMany({
+      where: {
+        isActive: true,
+        status: 'pending',
+        OR: [{ userId1: userId }, { userId2: userId }],
+      },
+      select: { id: true, userId1: true, userId2: true },
+    });
+    for (const m of pending) {
+      blocked.add(m.userId1);
+      blocked.add(m.userId2);
+    }
+
+    const accepted = await prisma.match.findMany({
+      where: {
+        isActive: true,
+        status: 'accepted',
+        OR: [{ userId1: userId }, { userId2: userId }],
+      },
+      select: { id: true, userId1: true, userId2: true },
+    });
+
+    for (const m of accepted) {
+      const latest = await prisma.swap.findFirst({
+        where: { matchId: m.id },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (!latest) {
+        blocked.add(m.userId1);
+        blocked.add(m.userId2);
+        continue;
+      }
+      if (TERMINAL_SWAP_STATUSES.has(latest.status)) {
+        try {
+          await this.markMatchFulfilled(m.id);
+          await this.#bustMatchCacheForUserPair(m.userId1, m.userId2);
+        } catch (e) {
+          // no-op: row may already be closed
+        }
+        continue;
+      }
+      blocked.add(m.userId1);
+      blocked.add(m.userId2);
+    }
+
+    return blocked;
+  }
+
+  /**
    * Get all active candidate users, excluding the given user and those
-   * they already have active matches with.
+   * they have an *open* pairing with (see getPartnerUserIdsWhoBlockNewSuggestions).
    *
    * Performance:
    *   - Limited to 200 candidates (pre-filter before scoring)
@@ -262,22 +379,7 @@ class MatchRepository {
    * @returns {Promise<Array>}
    */
   async getActiveCandidatePool(userId) {
-    // Find all user IDs this user is already matched with (active matches)
-    const existingMatches = await prisma.match.findMany({
-      where: {
-        isActive: true,
-        status: { in: ['pending', 'accepted'] },
-        OR: [{ userId1: userId }, { userId2: userId }],
-      },
-      select: { userId1: true, userId2: true },
-    });
-
-    // Collect IDs to exclude
-    const excludeIds = new Set([userId]);
-    for (const match of existingMatches) {
-      excludeIds.add(match.userId1);
-      excludeIds.add(match.userId2);
-    }
+    const excludeIds = await this.getPartnerUserIdsWhoBlockNewSuggestions(userId);
 
     return await prisma.user.findMany({
       where: {
@@ -290,6 +392,7 @@ class MatchRepository {
         profile: {
           select: {
             displayName: true,
+            bio: true,
             avatarUrl: true,
             location: true,
             latitude: true,

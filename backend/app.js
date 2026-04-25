@@ -31,11 +31,17 @@ const corsOriginValidator = (origin, callback) => {
   // Allow non-browser tools (curl/Postman) that do not send Origin
   if (!origin) return callback(null, true);
 
+  // Always allow local development origins (any localhost / 127.0.0.1 port),
+  // so changing the frontend dev port (e.g. 1575) does not require updating
+  // the backend CORS_ORIGIN env var.
+  if (isLocalDevOrigin(origin)) return callback(null, true);
+
+  // Otherwise, only allow explicitly configured origins.
   if (configuredOrigins.length > 0) {
     return callback(null, configuredOrigins.includes(origin));
   }
 
-  return callback(null, isLocalDevOrigin(origin));
+  return callback(null, false);
 };
 
 // Global Middlewares
@@ -48,6 +54,11 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Liveness probe (no DB; not behind /api rate limit)
+app.get('/health', (_req, res) => {
+  res.status(200).json({ ok: true });
+});
 
 // Apply Rate Limiting globally or specific to auth
 // As per instructions, rateLimiter is applied. We can apply it to API routes.

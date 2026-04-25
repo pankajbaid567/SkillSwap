@@ -26,10 +26,26 @@ const getParticipantName = (participant) => {
 
 const swapSteps = ['PENDING', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED'];
 
+/** Format Date for `datetime-local` value (local). */
+const toDatetimeLocalValue = (date) => {
+  const d = new Date(date);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 const SwapDetail = () => {
   const { swapId } = useParams();
   const navigate = useNavigate();
-  const { swap, isLoading, acceptSwap, cancelSwap, markComplete, scheduleSession, startSwap } = useSwap(swapId);
+  const {
+    swap,
+    isLoading,
+    acceptSwap,
+    cancelSwap,
+    markComplete,
+    scheduleSession,
+    rescheduleSession,
+    startSwap,
+  } = useSwap(swapId);
   const { messages, sendMessage, deleteMessage, sendTyping, isTyping } = useChat(swapId);
   const { user: currentUser } = useAuth();
 
@@ -45,6 +61,13 @@ const SwapDetail = () => {
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [scheduleMode, setScheduleMode] = useState('create'); // 'create' | 'reschedule'
+  const [sessionAtLocal, setSessionAtLocal] = useState('');
+  const [sessionDurationMins, setSessionDurationMins] = useState(60);
+  const [sessionNotes, setSessionNotes] = useState('');
+  const [isScheduling, setIsScheduling] = useState(false);
 
   const handleSubmitReview = async () => {
     if (reviewRating === 0) return toast.error('Please select a rating from 1 to 5 stars.');
@@ -71,19 +94,62 @@ const SwapDetail = () => {
   }, [swap?.status]);
   const swapSession = swap?.session || (Array.isArray(swap?.sessions) ? swap.sessions[0] : null);
 
-  const handleSchedule = async () => {
+  const openScheduleModal = (mode) => {
+    setScheduleMode(mode);
+    if (mode === 'reschedule' && swapSession?.scheduledAt) {
+      setSessionAtLocal(toDatetimeLocalValue(swapSession.scheduledAt));
+    } else {
+      const d = new Date();
+      d.setMinutes(0, 0, 0);
+      d.setHours(d.getHours() + 1);
+      setSessionAtLocal(toDatetimeLocalValue(d));
+    }
+    if (swapSession?.durationMins) {
+      setSessionDurationMins(swapSession.durationMins);
+    } else {
+      setSessionDurationMins(60);
+    }
+    setSessionNotes(swapSession?.notes || '');
+    setScheduleModalOpen(true);
+  };
+
+  const handleScheduleSubmit = async () => {
+    if (!sessionAtLocal) {
+      toast.error('Please choose a date and time for the session.');
+      return;
+    }
+    const scheduled = new Date(sessionAtLocal);
+    if (Number.isNaN(scheduled.getTime())) {
+      toast.error('Invalid date or time.');
+      return;
+    }
+    if (scheduled.getTime() < Date.now() - 60_000) {
+      toast.error('Pick a time in the future.');
+      return;
+    }
+    setIsScheduling(true);
     try {
-      await scheduleSession({
-        id: swapId,
-        payload: {
-          scheduledAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-          durationMins: 60,
-          notes: 'Scheduled from the frontend detail screen.',
-        },
-      });
-      toast.success('Session scheduled');
+      const payload = {
+        scheduledAt: scheduled.toISOString(),
+        durationMins: Math.min(240, Math.max(15, Number(sessionDurationMins) || 60)),
+        notes: sessionNotes?.trim() || 'Scheduled from SkillSwap.',
+      };
+      if (scheduleMode === 'reschedule' && swapSession?.id) {
+        await rescheduleSession({
+          id: swapId,
+          sessionId: swapSession.id,
+          payload: { scheduledAt: payload.scheduledAt },
+        });
+        toast.success('Session rescheduled');
+      } else {
+        await scheduleSession({ id: swapId, payload });
+        toast.success('Session scheduled');
+      }
+      setScheduleModalOpen(false);
     } catch (error) {
-      toast.error(error?.message || 'Unable to schedule a session');
+      toast.error(error?.message || 'Unable to save session time');
+    } finally {
+      setIsScheduling(false);
     }
   };
 
@@ -200,6 +266,18 @@ const SwapDetail = () => {
                  <>
                    <CalendarClock className="h-8 w-8 text-cyan-300 mb-3" />
                    <p className="text-white font-medium">{formatDateTime(swapSession.scheduledAt)}</p>
+                   {swapSession.durationMins != null && (
+                     <p className="mt-1 text-xs text-white/50">{swapSession.durationMins} min</p>
+                   )}
+                   {swap.status === 'ACCEPTED' && (
+                     <button
+                       type="button"
+                       onClick={() => openScheduleModal('reschedule')}
+                       className="mt-2 text-xs font-medium text-cyan-300/90 underline decoration-cyan-500/40 hover:text-cyan-200"
+                     >
+                       Change date & time
+                     </button>
+                   )}
                    {(swapSession.meetingUrl || swapSession.meetingLink) && (
                      <a href={swapSession.meetingUrl || swapSession.meetingLink} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 transition rounded-full text-xs font-bold text-white">
                         <Video className="h-3 w-3" /> Join Call
@@ -237,8 +315,27 @@ const SwapDetail = () => {
                   <>
                     {!swapSession && (
                       <>
-                        <button onClick={handleSchedule} className="w-full rounded-full border border-indigo-400/30 bg-indigo-500/10 py-3 text-sm font-semibold text-indigo-300 transition hover:bg-indigo-500/20">Schedule Session</button>
-                        <button onClick={async () => { try { await startSwap(swapId); toast.success('Swap started!'); } catch(e) { toast.error(e?.message||'Failed'); } }} className="w-full rounded-full border border-cyan-400/30 bg-cyan-500/10 py-3 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-500/20">Start Now</button>
+                        <button
+                          type="button"
+                          onClick={() => openScheduleModal('create')}
+                          className="w-full rounded-full border border-indigo-400/30 bg-indigo-500/10 py-3 text-sm font-semibold text-indigo-300 transition hover:bg-indigo-500/20"
+                        >
+                          Schedule Session
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await startSwap(swapId);
+                              toast.success('Swap started!');
+                            } catch (e) {
+                              toast.error(e?.message || 'Failed');
+                            }
+                          }}
+                          className="w-full rounded-full border border-cyan-400/30 bg-cyan-500/10 py-3 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-500/20"
+                        >
+                          Start Now
+                        </button>
                       </>
                     )}
                   </>
@@ -271,6 +368,72 @@ const SwapDetail = () => {
         isTyping={isTyping}
         active={swap.status !== 'CANCELLED'}
       />
+
+      {scheduleModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#0b1220] p-6 shadow-2xl">
+            <h2 className="text-lg font-semibold text-white">
+              {scheduleMode === 'reschedule' ? 'Reschedule session' : 'Schedule session'}
+            </h2>
+            <p className="mt-1 text-sm text-white/50">
+              Pick when you will meet. This is shared with your partner.
+            </p>
+            <div className="mt-5 space-y-4">
+              <label className="block text-xs font-medium uppercase tracking-wide text-white/45">
+                Date & time
+                <input
+                  type="datetime-local"
+                  value={sessionAtLocal}
+                  min={toDatetimeLocalValue(new Date())}
+                  onChange={(e) => setSessionAtLocal(e.target.value)}
+                  className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-500/50"
+                />
+              </label>
+              {scheduleMode === 'create' && (
+                <label className="block text-xs font-medium uppercase tracking-wide text-white/45">
+                  Duration (minutes)
+                  <input
+                    type="number"
+                    min={15}
+                    max={240}
+                    step={15}
+                    value={sessionDurationMins}
+                    onChange={(e) => setSessionDurationMins(Number(e.target.value))}
+                    className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-500/50"
+                  />
+                </label>
+              )}
+              <label className="block text-xs font-medium uppercase tracking-wide text-white/45">
+                Notes (optional)
+                <textarea
+                  value={sessionNotes}
+                  onChange={(e) => setSessionNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Agenda, link to prep material…"
+                  className="mt-1.5 w-full resize-none rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-cyan-500/50"
+                />
+              </label>
+            </div>
+            <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setScheduleModalOpen(false)}
+                className="rounded-full border border-white/10 px-4 py-2.5 text-sm font-medium text-white/70 transition hover:bg-white/5"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isScheduling}
+                onClick={handleScheduleSubmit}
+                className="rounded-full bg-gradient-to-r from-indigo-500 to-cyan-500 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:opacity-95 disabled:opacity-50"
+              >
+                {isScheduling ? 'Saving…' : scheduleMode === 'reschedule' ? 'Save new time' : 'Schedule'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isReviewModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">

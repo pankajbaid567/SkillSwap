@@ -13,7 +13,7 @@ const strategyOptions = [
   { value: 'hybrid', label: 'AI Hybrid' },
 ];
 
-const ExplainModal = ({ matchId, onClose }) => {
+const ExplainModal = ({ matchId, strategy, onClose }) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -22,14 +22,14 @@ const ExplainModal = ({ matchId, onClose }) => {
     if (!matchId) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
-    matchAPI.explainMatch(matchId).then((res) => {
-      setData(res?.explanation || res);
+    matchAPI.explainMatch(matchId, strategy ? { strategy } : {}).then((res) => {
+      setData(res);
       setLoading(false);
     }).catch(err => {
       setError(err?.message || 'Failed to load explanation');
       setLoading(false);
     });
-  }, [matchId]);
+  }, [matchId, strategy]);
 
   if (!matchId) return null;
 
@@ -54,36 +54,34 @@ const ExplainModal = ({ matchId, onClose }) => {
         ) : data ? (
           <div className="space-y-6">
             <p className="text-sm text-white/60">Here is the breakdown of why this profile is a suggested match.</p>
-            
+            {data.finalScore != null && (
+              <p className="text-sm text-cyan-200/90">
+                Model score: <span className="font-semibold">{Number(data.finalScore).toFixed(3)}</span> (0–1)
+              </p>
+            )}
             <div className="space-y-3">
-               {/* Extract features from data or fallback to some values if API varies */}
                {(() => {
-                 // Example mapping based on common matching logic:
-                 const breakdown = data.breakdown || [
-                   { label: 'Skill Overlap', value: data.skillScore || 60, color: 'bg-emerald-400' },
-                   { label: 'Reverse Match', value: data.reverseScore || 20, color: 'bg-cyan-400' },
-                   { label: 'Availability', value: data.availabilityScore || 10, color: 'bg-indigo-400' },
-                   { label: 'Rating', value: data.ratingScore || 10, color: 'bg-amber-400' },
+                 const breakdown = [
+                   { label: 'Skill overlap', value: (data.skillOverlapScore ?? 0) * 100, color: 'bg-emerald-400' },
+                   { label: 'Reverse', value: (data.reverseScore ?? 0) * 100, color: 'bg-cyan-400' },
+                   { label: 'Proficiency', value: (data.proficiencyBonus ?? 0) * 100, color: 'bg-violet-400' },
+                   { label: 'Availability', value: (data.availabilityScore ?? 0) * 100, color: 'bg-indigo-400' },
+                   { label: 'Rating', value: (data.ratingWeight ?? 0) * 100, color: 'bg-amber-400' },
                  ];
-                 
-                 // Normalize total to 100 for the stacked bar
-                 const total = breakdown.reduce((acc, curr) => acc + curr.value, 0) || 1;
+                 const total = breakdown.reduce((acc, curr) => acc + (Number.isFinite(curr.value) ? curr.value : 0), 0) || 1;
 
                  return (
                    <>
-                     {/* Horizontal Stacked Bar */}
                      <div className="w-full h-4 rounded-full overflow-hidden flex bg-white/5 shadow-inner">
                        {breakdown.map((item, idx) => (
-                         <div 
-                           key={idx} 
-                           className={`h-full ${item.color} transition-all duration-1000`} 
-                           style={{ width: `${(item.value / total) * 100}%` }} 
-                           title={`${item.label}: ${item.value}%`}
+                         <div
+                           key={idx}
+                           className={`h-full ${item.color} transition-all duration-1000`}
+                           style={{ width: `${(item.value / total) * 100}%` }}
+                           title={item.label}
                          />
                        ))}
                      </div>
-                     
-                     {/* Legend */}
                      <div className="grid grid-cols-2 gap-3 mt-4">
                        {breakdown.map((item, idx) => (
                          <div key={idx} className="flex items-center gap-2 text-sm text-white/70">
@@ -92,6 +90,11 @@ const ExplainModal = ({ matchId, onClose }) => {
                          </div>
                        ))}
                      </div>
+                     {Array.isArray(data.sharedSkills) && data.sharedSkills.length > 0 && (
+                       <p className="text-xs text-white/55 pt-2">
+                         Aligned skills: {data.sharedSkills.join(', ')}
+                       </p>
+                     )}
                    </>
                  );
                })()}
@@ -293,7 +296,16 @@ const Matches = () => {
   const [query, setQuery] = useState('');
   const [explainingMatchId, setExplainingMatchId] = useState(null);
   const [createSwapMatch, setCreateSwapMatch] = useState(null);
-  const { matches, stats, isLoading, acceptMatch, declineMatch } = useMatches({ strategy });
+  const {
+    matches,
+    stats,
+    pagination,
+    meta,
+    isLoading,
+    isStatsLoading,
+    acceptMatch,
+    declineMatch,
+  } = useMatches({ strategy });
 
   const filteredMatches = useMemo(() => {
     if (!query.trim()) return matches;
@@ -366,16 +378,24 @@ const Matches = () => {
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <article className="rounded-[1.75rem] border border-white/10 bg-white/5 p-5 shadow-lg shadow-black/10">
-          <p className="text-sm text-white/55">Total matches</p>
-          <p className="mt-3 text-3xl font-semibold text-white">{stats.totalMatches ?? matches.length}</p>
+          <p className="text-sm text-white/55">All-time match records</p>
+          <p className="mt-3 text-3xl font-semibold text-white">
+            {isStatsLoading ? '—' : (stats.totalMatches ?? 0)}
+          </p>
+          <p className="mt-1 text-xs text-white/40">Every strategy &amp; status (history)</p>
         </article>
         <article className="rounded-[1.75rem] border border-white/10 bg-white/5 p-5 shadow-lg shadow-black/10">
-          <p className="text-sm text-white/55">Accepted</p>
-          <p className="mt-3 text-3xl font-semibold text-white">{stats.acceptedMatches ?? 0}</p>
+          <p className="text-sm text-white/55">Shown for this tab</p>
+          <p className="mt-3 text-3xl font-semibold text-white">{pagination?.total ?? matches.length}</p>
+          <p className="mt-1 text-xs text-white/40">Current strategy, pending only</p>
         </article>
         <article className="rounded-[1.75rem] border border-white/10 bg-white/5 p-5 shadow-lg shadow-black/10">
-          <p className="text-sm text-white/55">Declined</p>
-          <p className="mt-3 text-3xl font-semibold text-white">{stats.declinedMatches ?? 0}</p>
+          <p className="text-sm text-white/55">Accepted / Declined</p>
+          <p className="mt-3 text-3xl font-semibold text-white">
+            {isStatsLoading
+              ? '—'
+              : `${stats.acceptedMatches ?? 0} / ${stats.declinedMatches ?? 0}`}
+          </p>
         </article>
         <article className="rounded-[1.75rem] border border-white/10 bg-white/5 p-5 shadow-lg shadow-black/10">
           <p className="text-sm text-white/55">Strategy</p>
@@ -389,8 +409,13 @@ const Matches = () => {
             Finding best suited matches for you...
           </div>
         ) : filteredMatches.length === 0 ? (
-          <div className="col-span-full rounded-[2rem] border border-dashed border-white/10 bg-white/5 p-8 text-center text-sm text-white/50">
-            No matches found for the current strategy or filters.
+          <div className="col-span-full rounded-[2rem] border border-dashed border-white/10 bg-white/5 p-8 text-center text-sm text-white/50 space-y-2">
+            <p>No suggested partners for <span className="text-cyan-200/90 capitalize">{strategy}</span> right now.</p>
+            {meta?.message && <p className="text-amber-200/80">{meta.message}</p>}
+            <p className="text-xs text-white/40 max-w-md mx-auto">
+              The big number above is your all-time match history. This list only shows <strong>pending</strong> suggestions
+              for the selected tab. After you finish or cancel a swap, you can be matched (and swap) with the same person again.
+            </p>
           </div>
         ) : filteredMatches.map((match, idx) => (
           <MatchCard
@@ -404,7 +429,11 @@ const Matches = () => {
       </section>
 
       {/* Explain Modal */}
-      <ExplainModal matchId={explainingMatchId} onClose={() => setExplainingMatchId(null)} />
+      <ExplainModal
+        matchId={explainingMatchId}
+        strategy={strategy}
+        onClose={() => setExplainingMatchId(null)}
+      />
 
       {/* Explicit swap creation flow after match acceptance */}
       <CreateSwapModal

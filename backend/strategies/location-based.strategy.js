@@ -56,9 +56,8 @@ class LocationBasedStrategy extends MatchingStrategy {
    * Pre-filter candidates: delegates to SkillBasedStrategy's filter,
    * then optionally removes candidates beyond MAX_DISTANCE_KM.
    */
-  findCandidates(userId, pool) {
-    // Start with skill-based filtering
-    return this._skillStrategy.findCandidates(userId, pool);
+  findCandidates(userId, pool, seeker = null) {
+    return this._skillStrategy.findCandidates(userId, pool, seeker);
   }
 
   /**

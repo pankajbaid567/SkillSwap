@@ -52,8 +52,8 @@ class AIHybridStrategy extends MatchingStrategy {
   /**
    * Filter candidates using skill-based pre-filtering.
    */
-  findCandidates(userId, pool) {
-    return this._skillStrategy.findCandidates(userId, pool);
+  findCandidates(userId, pool, seeker = null) {
+    return this._skillStrategy.findCandidates(userId, pool, seeker);
   }
 
   /**

@@ -4,6 +4,11 @@ const SwapService = require('../services/swap.service');
 
 // Mock dependencies
 jest.mock('../config/db.config', () => ({}));
+jest.mock('../cache/redis.client', () => ({
+  get: jest.fn().mockResolvedValue(null),
+  set: jest.fn().mockResolvedValue(),
+  invalidatePattern: jest.fn().mockResolvedValue(),
+}));
 jest.mock('../repositories/swap.repository');
 jest.mock('../repositories/match.repository');
 jest.mock('../repositories/user.repository');
@@ -43,6 +48,7 @@ describe('SwapService', () => {
     mockMatchRepo = require('../repositories/match.repository');
     mockUserRepo = require('../repositories/user.repository');
     mockEmitter = swapEventEmitter;
+    mockMatchRepo.markMatchFulfilled = jest.fn().mockResolvedValue({});
 
     swapService = new SwapService(mockSwapRepo, mockMatchRepo, mockUserRepo, mockEmitter);
   });

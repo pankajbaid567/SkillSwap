@@ -84,14 +84,30 @@ class MatchingController {
   }
 
   /**
-   * GET /api/matches/:id/explain
+   * GET /api/matches/:matchId/explain
+   * Uses the match record's strategy by default so the breakdown matches how the pair was scored.
    */
   async explainMatch(req, res, next) {
     try {
-      const strategyName = req.query.strategy || 'skill';
-      const strategy = StrategyFactory.create(strategyName);
+      const baseService = new MatchingService();
+      const match = await baseService.getMatchById(req.params.matchId);
+
+      if (match.userId1 !== req.user.id && match.userId2 !== req.user.id) {
+        const err = new Error('Forbidden: you are not part of this match');
+        err.statusCode = 403;
+        err.errorCode = 'FORBIDDEN';
+        throw err;
+      }
+
+      const classToKey = {
+        SkillBasedStrategy: 'skill',
+        LocationBasedStrategy: 'location',
+        AIHybridStrategy: 'hybrid',
+      };
+      const strategyKey = req.query.strategy || classToKey[match.strategyUsed] || 'skill';
+      const strategy = StrategyFactory.create(strategyKey);
       const service = new MatchingService(strategy);
-      
+
       const breakdown = await service.explainMatch(req.params.matchId);
       return sendSuccess(res, 200, 'Score breakdown generated', breakdown);
     } catch (error) {

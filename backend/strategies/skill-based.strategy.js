@@ -49,24 +49,41 @@ class SkillBasedStrategy extends MatchingStrategy {
   }
 
   /**
-   * Pre-filter candidates: keep only users who have at least one skill the seeker wants,
-   * or who want at least one skill the seeker offers.
-   * @param {string} userId - The seeking user's ID
-   * @param {Array} pool - Full candidate pool
-   * @returns {Array} Filtered candidates with at least some relevance
+   * Pre-filter: prefer complementary barter (you want what they offer, or they want what you offer).
+   * If that would return nobody, fall back to any candidate with at least one offer or want
+   * so small pools and early profiles still get suggestions.
+   * @param {string} userId
+   * @param {Array} pool
+   * @param {Object} [seeker] - User row with .skills (from findWithSkillsAndAvailability)
+   * @returns {Array}
    */
-  findCandidates(userId, pool) {
-    // Find the seeking user in the pool context — caller typically passes
-    // the seeker separately, but we still filter the pool itself.
-    return pool.filter((candidate) => {
+  findCandidates(userId, pool, seeker = null) {
+    const withSkillsOnly = (list) => list.filter((candidate) => {
       if (candidate.id === userId) return false;
-
-      const candidateOffers = this._getSkillIds(candidate, 'offer');
-      const candidateWants = this._getSkillIds(candidate, 'want');
-
-      // Keep candidate if there's ANY directional overlap
-      return candidateOffers.size > 0 || candidateWants.size > 0;
+      const o = this._getSkillIds(candidate, 'offer');
+      const w = this._getSkillIds(candidate, 'want');
+      return o.size > 0 || w.size > 0;
     });
+
+    if (!seeker) {
+      return withSkillsOnly(pool);
+    }
+
+    const complementary = pool.filter((candidate) => {
+      if (candidate.id === userId) return false;
+      const sw = this._getSkillIds(seeker, 'want');
+      const so = this._getSkillIds(seeker, 'offer');
+      const cOffers = this._getSkillIds(candidate, 'offer');
+      const cWants = this._getSkillIds(candidate, 'want');
+      const a = this._intersect(sw, cOffers);
+      const b = this._intersect(so, cWants);
+      return a.size > 0 || b.size > 0;
+    });
+
+    if (complementary.length > 0) {
+      return complementary;
+    }
+    return withSkillsOnly(pool);
   }
 
   /**

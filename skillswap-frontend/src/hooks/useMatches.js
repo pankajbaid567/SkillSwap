@@ -41,7 +41,9 @@ export const useMatches = (params = {}) => {
     pagination: matchesQuery.data?.pagination || null,
     meta: matchesQuery.data?.meta || null,
     stats: statsQuery.data || {},
-    isLoading: matchesQuery.isLoading || statsQuery.isLoading,
+    // List should not wait on global stats; fixes empty grid stuck behind stats loading
+    isLoading: matchesQuery.isLoading,
+    isStatsLoading: statsQuery.isLoading,
     isFetching: matchesQuery.isFetching || statsQuery.isFetching,
     error: matchesQuery.error || statsQuery.error,
     refetchMatches: matchesQuery.refetch,

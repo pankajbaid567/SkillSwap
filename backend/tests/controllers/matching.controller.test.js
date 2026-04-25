@@ -83,18 +83,27 @@ describe('MatchingController', () => {
   });
 
   describe('explainMatch', () => {
-    it('calls explainMatch', async () => {
-      const mockService = { explainMatch: jest.fn().mockResolvedValue({}) };
+    it('loads match for authorization, then calls explainMatch', async () => {
+      const match = { userId1: 'u1', userId2: 'u2', strategyUsed: 'SkillBasedStrategy' };
+      const mockService = {
+        getMatchById: jest.fn().mockResolvedValue(match),
+        explainMatch: jest.fn().mockResolvedValue({ finalScore: 0.5 }),
+      };
       MatchingService.mockImplementation(() => mockService);
       req.params.matchId = 'm1';
       await matchingController.explainMatch(req, res, next);
+      expect(mockService.getMatchById).toHaveBeenCalledWith('m1');
       expect(mockService.explainMatch).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
     });
 
     it('passes error to next', async () => {
+      const match = { userId1: 'u1', userId2: 'u2', strategyUsed: 'SkillBasedStrategy' };
       MatchingService.mockImplementation(() => ({
-        explainMatch: jest.fn().mockRejectedValue(new Error('fail'))
+        getMatchById: jest.fn().mockResolvedValue(match),
+        explainMatch: jest.fn().mockRejectedValue(new Error('fail')),
       }));
+      req.params.matchId = 'm1';
       await matchingController.explainMatch(req, res, next);
       expect(next).toHaveBeenCalled();
     });

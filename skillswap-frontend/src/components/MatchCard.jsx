@@ -3,26 +3,28 @@ import { Link } from 'react-router-dom';
 import { ROUTES } from '../constants/routes';
 
 const CircularProgress = ({ value, label }) => {
-  const percentage = Math.min(100, Math.max(0, value));
-  
+  const n = Number(value);
+  const clamped = Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 0;
+  const displayPct = Math.round(clamped);
+
   return (
-    <div className="relative flex items-center justify-center h-14 w-14 rounded-full bg-slate-950/50">
-      <svg className="h-full w-full transform -rotate-90" viewBox="0 0 36 36">
+    <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-slate-950/50">
+      <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36">
         <circle cx="18" cy="18" r="16" fill="none" className="stroke-white/10" strokeWidth="4" />
-        <circle 
-          cx="18" 
-          cy="18" 
-          r="16" 
-          fill="none" 
-          className="stroke-cyan-400" 
-          strokeWidth="4" 
-          strokeDasharray={`${percentage} 100`} 
-          strokeLinecap="round" 
+        <circle
+          cx="18"
+          cy="18"
+          r="16"
+          fill="none"
+          className="stroke-cyan-400"
+          strokeWidth="4"
+          strokeDasharray={`${displayPct} 100`}
+          strokeLinecap="round"
         />
       </svg>
-      <div className="absolute flex flex-col items-center">
-        <span className="text-[10px] uppercase text-cyan-200/80 leading-none">{label}</span>
-        <span className="text-sm font-bold text-white leading-tight">{percentage}%</span>
+      <div className="absolute flex max-w-[2.5rem] flex-col items-center justify-center text-center">
+        <span className="text-[9px] uppercase leading-none text-cyan-200/80">{label}</span>
+        <span className="font-bold leading-tight text-white tabular-nums text-sm">{displayPct}%</span>
       </div>
     </div>
   );
@@ -34,14 +36,18 @@ const MatchCard = ({ match, onAccept, onDecline, onExplain, compact = false }) =
   
   const displayName = profile?.displayName || profile?.name || userObj?.displayName || userObj?.name || (userObj?.email?.split('@')[0]) || 'Matched Partner';
   const location = profile?.location || userObj?.location || 'Remote friendly';
+  const bio = profile?.bio ?? userObj?.bio;
   const rating = userObj?.avgRating || match?.avgRating;
   const avatarUrl = profile?.avatarUrl || userObj?.avatarUrl;
   const userId = userObj?.id || match?.userId || match?.matchId || match?.id || null;
   
   let score = match?.score ?? match?.compatibilityScore ?? match?.matchScore ?? null;
-  // Automatically convert a decimal ratio to a percentage format for the UI (e.g., 0.75 -> 75)
-  if (score !== null && score !== undefined && score <= 1 && score > 0) {
-    score = score * 100;
+  if (score !== null && score !== undefined) {
+    let pct = Number(score);
+    if (Number.isFinite(pct) && pct > 0 && pct <= 1) {
+      pct *= 100;
+    }
+    score = Number.isFinite(pct) ? Math.round(pct) : null;
   }
 
   let offers = match?.offeredSkills || match?.skillsOffered || match?.skills?.offered || [];
@@ -94,6 +100,11 @@ const MatchCard = ({ match, onAccept, onDecline, onExplain, compact = false }) =
                 </span>
               )}
             </div>
+            {bio && (
+              <p className="mt-2 line-clamp-2 text-xs text-white/50 leading-relaxed" title={bio}>
+                {bio}
+              </p>
+            )}
           </div>
         </div>
         

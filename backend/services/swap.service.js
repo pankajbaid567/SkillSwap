@@ -4,6 +4,7 @@ const { implementsISwapReader, implementsISwapWriter } = require('../interfaces/
 const defaultSwapRepository = require('../repositories/swap.repository');
 const defaultMatchRepository = require('../repositories/match.repository');
 const defaultUserRepository = require('../repositories/user.repository');
+const { invalidateMatchesCacheForUsers } = require('./matching.service');
 const logger = require('../utils/logger');
 
 /**
@@ -285,6 +286,7 @@ class SwapService {
     if (bothConfirmed) {
       this.#eventEmitter.emitSwapCompleted(updatedSwap, updatedSwap.initiator, updatedSwap.receiver);
       logger.info(`Swap ${swapId} completed by both parties`);
+      await this._releaseMatchForRematch(updatedSwap);
     } else {
       logger.info(`Swap ${swapId} completion confirmed by ${userId}, waiting for other party`);
     }
@@ -328,7 +330,27 @@ class SwapService {
     );
 
     logger.info(`Swap ${swapId} cancelled`);
+    await this._releaseMatchForRematch(updatedSwap);
     return updatedSwap;
+  }
+
+  /**
+   * When a swap reaches a terminal outcome, close the related match so both users
+   * can receive new suggestions (and swap again with each other later).
+   * @param {Object} swap
+   * @private
+   */
+  async _releaseMatchForRematch(swap) {
+    if (!swap?.matchId) return;
+    try {
+      await this.#matchRepository.markMatchFulfilled(swap.matchId);
+      await invalidateMatchesCacheForUsers(swap.initiatorId, swap.receiverId);
+    } catch (err) {
+      logger.warn('Could not release match after swap terminal state', {
+        matchId: swap.matchId,
+        error: err.message,
+      });
+    }
   }
 
   /**
@@ -353,6 +375,13 @@ class SwapService {
     // Emit events for each expired swap
     for (const swap of expiredSwaps) {
       this.#eventEmitter.emitSwapExpired(swap, swap.initiator, swap.receiver);
+      const withParties = {
+        ...swap,
+        initiatorId: swap.initiatorId,
+        receiverId: swap.receiverId,
+        matchId: swap.matchId,
+      };
+      await this._releaseMatchForRematch(withParties);
     }
 
     logger.info(`Expired ${expiredSwaps.length} swaps`);

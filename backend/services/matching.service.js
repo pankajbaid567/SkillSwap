@@ -176,8 +176,8 @@ class MatchingService {
     // Get candidate pool (excludes existing matches, limited to 200)
     const pool = await this.#matchRepository.getActiveCandidatePool(userId);
 
-    // Pre-filter with strategy
-    const candidates = this.#strategy.findCandidates(userId, pool);
+    // Pre-filter with strategy (pass seeker for complementary offer/want logic)
+    const candidates = this.#strategy.findCandidates(userId, pool, user);
 
     // Score each candidate
     const scoredMatches = candidates.map((candidate) => {
@@ -415,6 +415,7 @@ class MatchingService {
     return {
       id: user.id,
       displayName: user.profile?.displayName || null,
+      bio: user.profile?.bio || null,
       avatarUrl: user.profile?.avatarUrl || null,
       avgRating: parseFloat(user.avgRating) || 0,
       location: user.profile?.location || null,
@@ -436,4 +437,15 @@ class MatchingService {
   }
 }
 
+/**
+ * After a match is no longer "active" (e.g. swap finished), clear cached /matches results for both users.
+ * @param {string} userId1
+ * @param {string} userId2
+ */
+async function invalidateMatchesCacheForUsers(userId1, userId2) {
+  await cache.invalidatePattern(`${CACHE_KEY_PREFIX}:${userId1}:*`);
+  await cache.invalidatePattern(`${CACHE_KEY_PREFIX}:${userId2}:*`);
+}
+
 module.exports = MatchingService;
+module.exports.invalidateMatchesCacheForUsers = invalidateMatchesCacheForUsers;

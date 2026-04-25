@@ -1,6 +1,8 @@
 const { Router } = require('express');
+const { z } = require('zod');
 const swapController = require('../controllers/swap.controller');
 const { verifyAccessToken } = require('../middlewares/auth.middleware');
+const { validateBody } = require('../middlewares/validate.middleware');
 
 const router = Router();
 
@@ -60,7 +62,15 @@ router.get('/sessions/upcoming', swapController.getUpcomingSessions);
  *   scheduledAt?: string - Optional scheduled date/time (ISO string)
  * }
  */
-router.post('/', swapController.createSwap);
+const createSwapSchema = z.object({
+  matchId: z.string().uuid(),
+  offeredSkillId: z.string().uuid(),
+  requestedSkillId: z.string().uuid(),
+  terms: z.string().optional(),
+  scheduledAt: z.string().datetime().optional(),
+});
+
+router.post('/', validateBody(createSwapSchema), swapController.createSwap);
 
 /**
  * GET /api/swaps

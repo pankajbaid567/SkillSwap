@@ -1,6 +1,9 @@
 const prisma = require('../../config/db.config');
 const matchRepository = require('../../repositories/match.repository');
 
+jest.mock('../../cache/redis.client', () => ({
+  invalidatePattern: jest.fn().mockResolvedValue(),
+}));
 jest.mock('../../config/db.config', () => ({
   match: {
     create: jest.fn(),
@@ -10,6 +13,9 @@ jest.mock('../../config/db.config', () => ({
     findFirst: jest.fn(),
     update: jest.fn(),
     updateMany: jest.fn(),
+  },
+  swap: {
+    findFirst: jest.fn(),
   },
   user: {
     findMany: jest.fn(),
@@ -45,9 +51,10 @@ describe('MatchRepository', () => {
     expect(prisma.match.findMany).toHaveBeenCalled();
   });
 
-  it('findExistingMatch calls findFirst', async () => {
-    prisma.match.findFirst.mockResolvedValue({ id: 'm1' });
-    await matchRepository.findExistingMatch('u1', 'u2');
+  it('findExistingMatch calls findFirst; pending does not need swap', async () => {
+    prisma.match.findFirst.mockResolvedValue({ id: 'm1', status: 'pending' });
+    const res = await matchRepository.findExistingMatch('u1', 'u2');
+    expect(res?.id).toBe('m1');
     expect(prisma.match.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ OR: expect.any(Array) })
     }));
@@ -91,11 +98,13 @@ describe('MatchRepository', () => {
   });
 
   describe('getActiveCandidatePool', () => {
-    it('excludes existing matched users', async () => {
-      prisma.match.findMany.mockResolvedValue([
-        { userId1: 'u1', userId2: 'u2' },
-        { userId1: 'u3', userId2: 'u1' }
-      ]);
+    it('excludes open pairings (pending) from candidate pool', async () => {
+      prisma.match.findMany
+        .mockResolvedValueOnce([
+          { id: 'm1', userId1: 'u1', userId2: 'u2' },
+          { id: 'm2', userId1: 'u3', userId2: 'u1' },
+        ])
+        .mockResolvedValueOnce([]);
       prisma.user.findMany.mockResolvedValue([]);
 
       await matchRepository.getActiveCandidatePool('u1');
