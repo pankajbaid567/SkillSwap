@@ -1,4 +1,13 @@
 const defaultUserRepository = require('../repositories/user.repository');
+
+jest.mock('../services/matching.service', () => {
+  const actual = jest.requireActual('../services/matching.service');
+  return {
+    ...actual,
+    invalidateMatchesCacheGlobally: jest.fn().mockResolvedValue(0),
+  };
+});
+
 const userService = require('../services/user.service');
 
 jest.mock('../repositories/user.repository');

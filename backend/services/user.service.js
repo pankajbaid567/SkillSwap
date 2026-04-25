@@ -1,5 +1,6 @@
 const prisma = require('../config/db.config'); // Fallback if we need specific raw queries, but try to use repo
 const defaultUserRepository = require('../repositories/user.repository');
+const { invalidateMatchesCacheGlobally } = require('./matching.service');
 
 /**
  * Encapsulates the core business logic for user profiles, skills, and availability.
@@ -55,6 +56,7 @@ class UserService {
       timezone: dto.timezone
     });
 
+    await invalidateMatchesCacheGlobally();
     return await this.getProfile(userId);
   }
 
@@ -110,6 +112,7 @@ class UserService {
         proficiencyLevel: skillDto.proficiencyLevel,
         description: skillDto.description
       });
+      await invalidateMatchesCacheGlobally();
       return newSkill;
     } catch (e) {
       if (e.code === 'P2002') {
@@ -142,6 +145,7 @@ class UserService {
     }
 
     await this.userRepository.deleteUserSkill(userSkillId);
+    await invalidateMatchesCacheGlobally();
   }
 
   async updateSkillLevel(userId, userSkillId, level) {
@@ -158,7 +162,9 @@ class UserService {
       throw error;
     }
 
-    return await this.userRepository.updateUserSkillLevel(userSkillId, level);
+    const out = await this.userRepository.updateUserSkillLevel(userSkillId, level);
+    await invalidateMatchesCacheGlobally();
+    return out;
   }
 
   async addAvailabilitySlot(userId, slotDto) {
@@ -174,13 +180,15 @@ class UserService {
 
     // Optionally check if slot perfectly overlaps here 
     // Basic constraint: valid times
-    return await this.userRepository.createAvailabilitySlot({
+    const slot = await this.userRepository.createAvailabilitySlot({
       userId,
       dayOfWeek: slotDto.dayOfWeek,
       slotStart: slotDto.slotStart, // Assuming strictly checked schema date string format (e.g. 1970-01-01T14:30:00.000Z)
       slotEnd: slotDto.slotEnd,
       isRecurring: slotDto.isRecurring
     });
+    await invalidateMatchesCacheGlobally();
+    return slot;
   }
 
   async bulkUpdateAvailability(userId, availabilityMap) {
@@ -215,6 +223,7 @@ class UserService {
     }
 
     await this.userRepository.replaceAvailabilitySlots(userId, slots);
+    await invalidateMatchesCacheGlobally();
     return await this.getProfile(userId);
   }
 
@@ -233,6 +242,7 @@ class UserService {
     }
 
     await this.userRepository.deleteAvailabilitySlot(slotId);
+    await invalidateMatchesCacheGlobally();
   }
 
   async searchUsers(query, filters) {

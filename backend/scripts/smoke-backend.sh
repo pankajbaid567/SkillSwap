@@ -54,14 +54,11 @@ if [[ -n "${REFRESH_TOKEN}" ]]; then
   json -X POST "${BASE_URL}/api/auth/refresh" -d "{\"refreshToken\":\"${REFRESH_TOKEN}\"}" | jq .
 fi
 
+echo "==> /api/users/me (before logout)"
+auth_json "${ACCESS_TOKEN}" "${BASE_URL}/api/users/me" | jq .
+
 echo "==> Socket.io smoke (connect + NOT_FOUND join)"
 TOKEN="${ACCESS_TOKEN}" BASE_URL="${BASE_URL}" node scripts/smoke-socket.js
-
-echo "==> Auth logout (should succeed)"
-auth_json "${ACCESS_TOKEN}" -X POST "${BASE_URL}/api/auth/logout" | jq .
-
-echo "==> /api/users/me"
-auth_json "${ACCESS_TOKEN}" "${BASE_URL}/api/users/me" | jq .
 
 echo "==> Update notification preferences"
 auth_json "${ACCESS_TOKEN}" -X PUT "${BASE_URL}/api/users/me/notification-preferences" \
@@ -99,6 +96,9 @@ if [[ "${STATUS}" == "500" ]]; then
   echo "ERROR: swap create returned 500 (should be validation 4xx)" >&2
   exit 1
 fi
+
+echo "==> Auth logout (last; revokes refresh token)"
+auth_json "${ACCESS_TOKEN}" -X POST "${BASE_URL}/api/auth/logout" | jq .
 
 echo "==> Done (basic smoke passed)."
 

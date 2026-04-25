@@ -8,6 +8,7 @@
     "dev": "nodemon server.js",
     "db:seed": "prisma db seed",
     "smoke": "bash scripts/smoke-backend.sh",
+    "curl:all": "bash scripts/curl-api-all.sh",
     "test": "jest"
   },
   "prisma": {

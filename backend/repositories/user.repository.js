@@ -150,6 +150,11 @@ class UserRepository {
           }
         });
         OR.push({
+          profile: {
+            bio: { contains: searchQuery, mode: 'insensitive' }
+          }
+        });
+        OR.push({
           skills: {
             some: {
               skill: { name: { contains: searchQuery, mode: 'insensitive' } }

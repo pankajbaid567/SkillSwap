@@ -386,6 +386,7 @@ class MatchRepository {
         id: { notIn: Array.from(excludeIds) },
         isActive: true,
       },
+      orderBy: { updatedAt: 'desc' },
       select: {
         id: true,
         avgRating: true,

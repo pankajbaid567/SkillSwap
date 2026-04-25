@@ -447,5 +447,15 @@ async function invalidateMatchesCacheForUsers(userId1, userId2) {
   await cache.invalidatePattern(`${CACHE_KEY_PREFIX}:${userId2}:*`);
 }
 
+/**
+ * Clear every cached /matches response. Call when *any* user's skills/availability/profile
+ * used for matching change so *other* users (not just the editor) get fresh results.
+ * @returns {Promise<number>}
+ */
+async function invalidateMatchesCacheGlobally() {
+  return await cache.invalidatePattern(`${CACHE_KEY_PREFIX}:*`);
+}
+
 module.exports = MatchingService;
 module.exports.invalidateMatchesCacheForUsers = invalidateMatchesCacheForUsers;
+module.exports.invalidateMatchesCacheGlobally = invalidateMatchesCacheGlobally;
