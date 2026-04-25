@@ -6,7 +6,10 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(10, 'JWT_SECRET must be at least 10 characters long'),
   JWT_REFRESH_SECRET: z.string().min(10, 'JWT_REFRESH_SECRET must be at least 10 characters long'),
   DATABASE_URL: z.string().url('DATABASE_URL must be a valid connection string'),
-  REDIS_URL: z.string().url().optional(),
+  REDIS_URL: z.preprocess(
+    (v) => (v === undefined || v === null || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+    z.string().url().optional()
+  ),
   LOG_LEVEL: z.string().default('info'),
 });
 

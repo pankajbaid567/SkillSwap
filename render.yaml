@@ -4,7 +4,7 @@
 # - DATABASE_URL: Neon connection string (required at build time for migrate on free tier; no preDeploy on free).
 # - CORS_ORIGIN: your static site origin, e.g. https://skillswap-web.onrender.com
 # - VITE_API_URL: public API base with /api, e.g. https://skillswap-api.onrender.com/api
-# Optional: add REDIS_URL (Upstash) in the API service in the Render dashboard for Redis cache + Socket.io adapter.
+# - REDIS_URL: Upstash (optional). Omit in dashboard or leave for later if you add it to the API service by hand.
 # If Neon/Upstash strings were ever pasted in chat, rotate credentials in those providers.
 
 services:
@@ -24,6 +24,8 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: CORS_ORIGIN
+        sync: false
+      - key: REDIS_URL
         sync: false
       - key: JWT_SECRET
         generateValue: true
